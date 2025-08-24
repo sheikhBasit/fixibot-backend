@@ -1,0 +1,49 @@
+import os
+import shutil
+import cloudinary
+import cloudinary.uploader
+from fastapi import UploadFile
+from uuid import uuid4
+
+from typing import Any
+from config import settings
+
+# Configure Cloudinary (always)
+cloudinary.config(
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET,
+    secure=True
+)
+
+async def upload_image(file: UploadFile) -> str:
+    """
+    Saves to local temp folder in development, then uploads to Cloudinary.
+    In production, directly uploads to Cloudinary.
+    Returns Cloudinary image URL in both environments.
+    """
+    filename = f"{uuid4().hex}_{file.filename}"
+    local_path = os.path.join("public", "temp")
+    os.makedirs(local_path, exist_ok=True)
+    destination = os.path.join(local_path, filename)
+
+    try:
+        if settings.ENVIRONMENT == "development":
+            # Save locally
+            with open(destination, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # Upload from saved file
+            with open(destination, "rb") as f:
+                result : dict[str, Any] = cloudinary.uploader.upload(f, public_id=filename)
+
+        else:
+            # Direct upload in production
+            result : dict[str, Any] = cloudinary.uploader.upload(file.file, public_id=filename)
+
+        return result["secure_url"]
+
+    finally:
+        # Delete local file if it exists
+        if settings.ENVIRONMENT == "development" and os.path.exists(destination):
+            os.remove(destination)
