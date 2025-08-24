@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # FastAPI Template
 
 This sample repo contains the recommended structure for a Python FastAPI project. In this sample, we use `fastapi` to build a web application and the `pytest` to run tests.
@@ -31,3 +32,6 @@ In addition to these extension there a few settings that are also useful to enab
 - Test the API functionality by navigating to `/docs` URL to view the Swagger UI
 - Configure your Python test in the Test Panel or by triggering the **Python: Configure Tests** command from the Command Palette
 - Run tests in the Test Panel or by clicking the Play Button next to the individual tests in the `test_main.py` file
+=======
+# fixibot-backend
+>>>>>>> 5e33899aecee5a218cfea22af865399d82313a3f
