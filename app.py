@@ -139,11 +139,11 @@ app.include_router(chat.router)
 app.include_router(health.router)
 app.include_router(vehicle.router)
 app.include_router(feedback.router)
-app.include_router(ai_service.router)
 app.include_router(mechanic.router)
 app.include_router(mechanic_service.router)
 app.include_router(user.router)
-app.include_router(self_help.router)
+# app.include_router(ai_service.router)
+# app.include_router(self_help.router)
 
 
 
