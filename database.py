@@ -1,6 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import settings
 import logging
+import certifi  
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class Database:
     mechanic_service_collection = None
     ai_service_collection = None
     self_help_collection = None
-    chat_sessions_collection = None  # Add this line
+    chat_sessions_collection = None
 
 db = Database()
 
@@ -23,12 +24,15 @@ async def connect_to_mongo():
         db.client = AsyncIOMotorClient(
             str(settings.MONGODB_URL),
             tls=True,
+            tlsCAFile=certifi.where(),  # Add certifi for SSL
             tlsAllowInvalidCertificates=False,
             retryWrites=True,
             w="majority",
             appName="Cluster0",
             maxPoolSize=100,
-            minPoolSize=10
+            minPoolSize=10,
+            connectTimeoutMS=30000,  # Add timeouts
+            serverSelectionTimeoutMS=30000
         )
         
         await db.client.admin.command('ping')
@@ -42,12 +46,11 @@ async def connect_to_mongo():
         db.mechanic_service_collection = db.db.mechanic_service_collection        
         db.ai_service_collection = db.db.ai_service_collection
         db.self_help_collection = db.db.self_help_collection
-        db.chat_sessions_collection = db.db.chat_sessions  # Add this line
+        db.chat_sessions_collection = db.db.chat_sessions
 
         # Create indexes (keep your existing indexes)
         await db.users_collection.create_index("email", unique=True)
         await db.users_collection.create_index("phone_number", unique=True, sparse=True)
-        # Run this once to create the index
         await db.mechanics_collection.create_index([("location", "2dsphere")])
         await db.vehicles_collection.create_index("user_id")
         await db.mechanics_collection.create_index("cnic", unique=True, sparse=True)
@@ -69,6 +72,10 @@ async def connect_to_mongo():
         await db.chat_sessions_collection.create_index([("updated_at", -1)])
 
         logger.info("Successfully connected to MongoDB")
+        
+        # Return the MongoDB client
+        return db.client  # ← ADD THIS LINE
+        
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
         raise
@@ -81,7 +88,6 @@ async def close_mongo_connection():
     except Exception as e:
         logger.error(f"Error closing MongoDB connection: {e}")
         raise
-
 # async def get_user_by_email(email: str) -> UserInDB:
 #     try:
 #         user = await db.users_collection.find_one({"email": email})

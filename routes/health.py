@@ -21,7 +21,7 @@ async def get_system_metrics() -> Dict[str, Any]:
         load_avg = psutil.getloadavg()
         
         return {
-            "timestamp": datetime.now(timezone.utc)().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "system": {
                 "hostname": socket.gethostname(),
                 "os": f"{platform.system()} {platform.release()}",
@@ -55,7 +55,7 @@ async def get_system_metrics() -> Dict[str, Any]:
         return {
             "error": f"Failed to collect metrics: {str(e)}",
             "available_metrics": {
-                "timestamp": datetime.now(timezone.utc)().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "system": {
                     "hostname": socket.gethostname(),
                     "os": f"{platform.system()} {platform.release()}",
@@ -63,18 +63,24 @@ async def get_system_metrics() -> Dict[str, Any]:
             }
         }
 
-async def check_mongodb_connection(mongo_client: AsyncIOMotorClient) -> Dict[str, Any]:
+async def check_service_dependencies(mongo_client) -> Dict[str, Dict[str, Any]]:
+    """Check status of critical service dependencies."""
+    return {
+        "database": await check_mongodb_connection(mongo_client)
+    }
+
+async def check_mongodb_connection(mongo_client) -> Dict[str, Any]:
     """Check MongoDB connection status and latency."""
     if not mongo_client:
         return {"status": "disconnected", "error": "MongoDB client not initialized"}
     
     try:
         start_time = time.time()
-        await mongo_client.admin.command('ping')
+        await mongo_client.admin.command('ping')  # Use the passed client
         latency_ms = round((time.time() - start_time) * 1000, 2)
         
         server_info = await mongo_client.admin.command('buildInfo')
-        db = mongo_client.get_database(settings.MONGO_DB)
+        db = mongo_client[settings.MONGO_DB]  # Get database from client
         
         return {
             "status": "connected",
@@ -92,67 +98,21 @@ async def check_mongodb_connection(mongo_client: AsyncIOMotorClient) -> Dict[str
         logger.error(f"MongoDB connection check failed: {str(e)}")
         return {"status": "disconnected", "error": str(e)}
 
-async def check_service_dependencies(mongo_client: AsyncIOMotorClient) -> Dict[str, Dict[str, Any]]:
-    """Check status of critical service dependencies."""
-    return {
-        "database": await check_mongodb_connection(mongo_client)
-    }
-
 @router.get(
     "/",
     summary="Comprehensive System Health Check",
-    response_description="Detailed system health metrics",
-    responses={
-        200: {
-            "description": "System is healthy",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "healthy",
-                        "system": {
-                            "hostname": "production-server-1",
-                            "uptime_seconds": 123456
-                        },
-                        "dependencies": {
-                            "database": {
-                                "status": "connected", 
-                                "latency_ms": 12.3,
-                                "version": "6.0.4",
-                                "collections": {
-                                    "users": 42,
-                                    "mechanics": 15
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        503: {
-            "description": "Service Unavailable",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "unhealthy",
-                        "critical_errors": ["Database connection failed"]
-                    }
-                }
-            }
-        }
-    }
+    response_description="Detailed system health metrics"
 )
 async def health_check(request: Request):
     """
-    Comprehensive health check endpoint that provides:
-    - System resource utilization (CPU, memory, disk)
-    - Service dependencies status (including real MongoDB connection check)
-    - API responsiveness metrics
-    
-    Returns 200 OK if all systems are healthy, 503 if any critical services are down.
+    Comprehensive health check endpoint
     """
     try:
+        # Get the MongoDB client from app.state, not request.state
+        mongo_client = request.app.state.mongo_client  # ← FIX THIS LINE
+        
         metrics = await get_system_metrics()
-        dependencies = await check_service_dependencies(request.state.mongo_client)
+        dependencies = await check_service_dependencies(mongo_client)  # ← PASS THE CLIENT
         
         health_status = {
             "status": "healthy",
@@ -190,4 +150,4 @@ async def health_check(request: Request):
                 "error": str(e)
             },
             status_code=500
-        )
+        )   

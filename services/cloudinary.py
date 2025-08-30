@@ -2,8 +2,6 @@ import onnxruntime
 import numpy as np
 from PIL import Image, ImageStat, UnidentifiedImageError, ImageFilter
 import io
-import os
-import shutil
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, HTTPException
