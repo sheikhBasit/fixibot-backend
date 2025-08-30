@@ -15,5 +15,3 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
-.scannerwork/
-.vector_cache/
