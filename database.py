@@ -16,6 +16,8 @@ class Database:
     ai_service_collection = None
     self_help_collection = None
     chat_sessions_collection = None
+    audit_logs_collection = None
+    settings_collection= None
 
 db = Database()
 
@@ -47,6 +49,8 @@ async def connect_to_mongo():
         db.ai_service_collection = db.db.ai_service_collection
         db.self_help_collection = db.db.self_help_collection
         db.chat_sessions_collection = db.db.chat_sessions
+        db.audit_logs_collection = db.db.audit_logs
+        db.settings_collection = db.db.settings
 
         # Create indexes (keep your existing indexes)
         await db.users_collection.create_index("email", unique=True)

@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from models.user import UserInDB, UserRole
 from services.admin import AdminService
@@ -167,3 +169,218 @@ async def get_admin_overview(
     
     # You'll need to implement this service function
     return await AdminService.get_dashboard_overview()
+
+# Report Routes
+@router.get("/reports/users")
+async def generate_users_report(
+    time_range: str = "30d",
+    format: str = "json",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Generate comprehensive users report"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.generate_users_report(time_range, format)
+
+@router.get("/reports/services")
+async def generate_services_report(
+    time_range: str = "30d",
+    format: str = "json",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Generate comprehensive services report"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.generate_services_report(time_range, format)
+
+@router.get("/reports/mechanics")
+async def generate_mechanics_report(
+    time_range: str = "30d",
+    format: str = "json",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Generate comprehensive mechanics report"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.generate_mechanics_report(time_range, format)
+
+@router.get("/reports/financial")
+async def generate_financial_report(
+    time_range: str = "30d",
+    format: str = "json",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Generate comprehensive financial report"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.generate_financial_report(time_range, format)
+
+@router.get("/reports/export/{format}")
+async def export_report(
+    format: str,
+    report_type: str,
+    time_range: str = "30d",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Export report in various formats"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Generate the appropriate report based on type
+    if report_type == "users":
+        report_data = await AdminService.generate_users_report(time_range, "json")
+    elif report_type == "services":
+        report_data = await AdminService.generate_services_report(time_range, "json")
+    elif report_type == "mechanics":
+        report_data = await AdminService.generate_mechanics_report(time_range, "json")
+    elif report_type == "financial":
+        report_data = await AdminService.generate_financial_report(time_range, "json")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid report type")
+    
+    return await AdminService.export_report(report_data, format)
+
+# Settings Routes
+@router.get("/settings")
+async def get_system_settings(
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get all system settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_system_settings()
+
+@router.put("/settings")
+async def update_system_settings(
+    settings_data: Dict[str, Any],
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Update system settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    success = await AdminService.update_system_settings(settings_data)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update system settings")
+    
+    return {"status": "success", "message": "System settings updated successfully"}
+
+@router.get("/settings/email")
+async def get_email_settings(
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get email settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_email_settings()
+
+@router.put("/settings/email")
+async def update_email_settings(
+    settings_data: Dict[str, Any],
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Update email settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    success = await AdminService.update_email_settings(settings_data)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update email settings")
+    
+    return {"status": "success", "message": "Email settings updated successfully"}
+
+@router.get("/settings/notifications")
+async def get_notification_settings(
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get notification settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_notification_settings()
+
+@router.put("/settings/notifications")
+async def update_notification_settings(
+    settings_data: Dict[str, Any],
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Update notification settings"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    success = await AdminService.update_notification_settings(settings_data)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update notification settings")
+    
+    return {"status": "success", "message": "Notification settings updated successfully"}
+
+# Audit Log Routes
+@router.get("/audit/logs")
+async def get_audit_logs(
+    skip: int = 0,
+    limit: int = 50,
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get audit logs with filtering"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Build filters
+    filters = {}
+    if action:
+        filters["action"] = action
+    if user_id:
+        filters["user_id"] = user_id
+    if start_date or end_date:
+        date_filter = {}
+        if start_date:
+            date_filter["$gte"] = start_date
+        if end_date:
+            date_filter["$lte"] = end_date
+        filters["timestamp"] = date_filter
+    
+    return await AdminService.get_audit_logs(skip, limit, filters)
+
+@router.get("/audit/logs/{log_id}")
+async def get_audit_log(
+    log_id: str,
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get specific audit log by ID"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_audit_log(log_id)
+
+@router.get("/audit/actions")
+async def get_audit_action_stats(
+    time_range: str = "7d",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get audit action statistics"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_audit_action_stats(time_range)
+
+@router.get("/audit/users/{user_id}")
+async def get_user_activity_audit(
+    user_id: str,
+    time_range: str = "30d",
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Admin: Get user activity audit report"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return await AdminService.get_user_activity_audit(user_id, time_range)
