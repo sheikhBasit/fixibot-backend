@@ -1,4 +1,3 @@
-# vehicle_service.py for Mechanic Services
 from typing import List
 from bson import ObjectId
 from fastapi import HTTPException
@@ -159,3 +158,20 @@ class MechanicService:
         except Exception as e:
             logger.error(f"Error fetching mechanic services for user {user_id}: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch services for the specified user")
+
+    @staticmethod
+    async def get_by_current_user(user_id: str, skip: int = 0, limit: int = 50, sort_by: str = "created_at", sort_order: int = -1) -> List[MechanicServiceOut]:
+        try:
+            if db.mechanic_service_collection is None:
+                raise HTTPException(status_code=500, detail="Database not initialized")
+            
+            obj_id = ObjectId(user_id)
+            services = await db.mechanic_service_collection.find({"user_id": obj_id})\
+                .sort(sort_by, sort_order)\
+                .skip(skip)\
+                .limit(limit)\
+                .to_list(length=limit)
+            return [MechanicServiceOut(**svc) for svc in services]
+        except Exception as e:
+            logger.error(f"Error fetching mechanic services for current user {user_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch your service history")

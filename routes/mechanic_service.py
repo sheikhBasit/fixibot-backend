@@ -21,6 +21,24 @@ async def create_mechanic_service(
 ):
     return await MechanicService.create(service)
 
+@router.get("/user/my-services", response_model=List[MechanicServiceOut], summary="Get current user's service history")
+async def get_my_mechanic_services(
+    skip: int = Query(0, ge=0, description="Records to skip"),
+    limit: int = Query(50, le=100, description="Records per page"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_order: int = Query(-1, description="Sort order (1 for ascending, -1 for descending)"),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """
+    Get the service history for the currently authenticated user with pagination and sorting.
+    """
+    return await MechanicService.get_by_current_user(
+        str(current_user.id), 
+        skip, 
+        limit, 
+        sort_by, 
+        sort_order
+    )
 
 @router.get("/{service_id}", response_model=MechanicServiceOut, summary="Get mechanic service by ID")
 async def get_mechanic_service_by_id(
@@ -69,3 +87,5 @@ async def get_services_by_user_admin(user_id: str, current_user: UserInDB = Depe
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
     return await MechanicService.get_by_user_admin(user_id)
+
+
