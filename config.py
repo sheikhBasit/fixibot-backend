@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     MONGO_DB: str
     SECRET_KEY: str
     ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    ACCESS_TOKEN_EXPIRE_DAYS: int
     EMAIL_TOKEN_EXPIRE_MINUTES: int
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str

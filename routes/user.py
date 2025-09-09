@@ -45,7 +45,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             detail="Email not verified",
         )
     
-    access_token_expires = timedelta(days=(settings.ACCESS_TOKEN_EXPIRE_MINUTES)*5)
+    access_token_expires = timedelta(days=(settings.ACCESS_TOKEN_EXPIRE_DAYS)*5)
     access_token = create_access_token(
         data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
@@ -277,7 +277,7 @@ async def get_user_by_email_admin(
     # Normalize email
     email = email.lower()
     
-    user = await UserService.get_user_by_email(email)
+    user = await UserService.admin_get_user_by_email(email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -512,7 +512,7 @@ async def google_login(payload: GoogleSignInRequest):
             user = await UserService.create_user_from_google(user_data)
 
         # Generate JWT token for your app
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_DAYS)
         token = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
 
         return {

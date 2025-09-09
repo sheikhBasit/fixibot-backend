@@ -21,7 +21,10 @@ class UserService:
         """Get user by email from database."""
         try:
             user = await db.users_collection.find_one({"email": email.lower()})
-            return UserInDB(**user) if user else None
+            if user:
+                user["_id"] = str(user["_id"])
+                return UserInDB(**user)
+            return None
         except Exception as e:
             logger.error(f"Error fetching user by email {email}: {e}")
             raise HTTPException(
