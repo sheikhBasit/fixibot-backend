@@ -4,9 +4,10 @@ from typing import List
 from bson import ObjectId
 from fastapi import HTTPException
 from pymongo import DESCENDING
-from models.vehicle import  VehicleOut, VehicleSearch, VehicleUpdate
+from models.vehicle import  VehicleOut, VehicleSearch, VehicleUpdate, VehicleWithOwnerOut
+from models.user import UserOut
+    
 from utils.py_object import PyObjectId
-
 from database import db
 from utils.time import utc_now
 import logging
@@ -25,6 +26,45 @@ class VehicleService:
             logger.error(f"Error creating vehicle: {e}")
             raise HTTPException(status_code=500, detail="Error creating vehicle")
 
+    @staticmethod
+    async def admin_get_all_vehicles_with_owner(skip: int = 0, limit: int = 100, sort_by: str = "created_at", sort_order: str = "desc") -> List[VehicleWithOwnerOut]:
+        """Admin: Get all vehicles with owner info."""
+        try:
+            sort_direction = DESCENDING if sort_order == "desc" else 1
+            vehicles_cursor = db.vehicles_collection.find({}) \
+                .sort(sort_by, sort_direction) \
+                .skip(skip).limit(limit)
+            vehicles = await vehicles_cursor.to_list(length=limit)
+            user_ids = list({v["user_id"] for v in vehicles if v.get("user_id")})
+            users = {u["_id"]: u for u in await db.users_collection.find({"_id": {"$in": user_ids}}).to_list(length=len(user_ids))}
+            result = []
+            for v in vehicles:
+                owner = users.get(v["user_id"])
+                if owner and isinstance(owner.get("_id"), ObjectId):
+                    owner = {**owner, "_id": str(owner["_id"])}
+                v["owner"] = UserOut(**owner) if owner else None
+                result.append(VehicleWithOwnerOut(**v))
+            logger.info(f"Admin retrieved {len(result)} vehicles with owner info")
+            return result
+        except Exception as e:
+            logger.error(f"Admin vehicle retrieval with owner failed: {e}")
+            raise HTTPException(status_code=500, detail="Error retrieving vehicles with owner info")
+
+    @staticmethod
+    async def admin_get_vehicle_with_owner(vehicle_id: str) -> VehicleWithOwnerOut:
+        """Admin: Get a single vehicle with owner info."""
+        try:
+            vehicle = await db.vehicles_collection.find_one({"_id": ObjectId(vehicle_id)})
+            if not vehicle:
+                raise HTTPException(status_code=404, detail="Vehicle not found")
+            owner = await db.users_collection.find_one({"_id": vehicle["user_id"]})
+            if owner and isinstance(owner.get("_id"), ObjectId):
+                owner = {**owner, "_id": str(owner["_id"])}
+            vehicle["owner"] = UserOut(**owner) if owner else None
+            return VehicleWithOwnerOut(**vehicle)
+        except Exception as e:
+            logger.error(f"Admin get vehicle with owner failed: {e}")
+            raise HTTPException(status_code=500, detail="Error retrieving vehicle with owner info")
     @staticmethod
     async def get_by_id(vehicle_id: str, user_id: PyObjectId) -> VehicleOut:
         try:

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query, Form, File, UploadFile
 from typing import List, Optional
 from bson import ObjectId
-from models.vehicle import VehicleIn, VehicleOut, VehicleUpdate, VehicleSearch
+from models.vehicle import VehicleIn, VehicleOut, VehicleUpdate, VehicleSearch, VehicleWithOwnerOut
 from models.user import UserInDB, UserRole
 from utils.user import get_current_user
 from services.cloudinary import upload_image
@@ -72,7 +72,8 @@ async def get_user_vehicles(current_user: UserInDB = Depends(get_current_user)):
     )
     return vehicles
 
-@router.get("/admin/all", response_model=List[VehicleOut], summary="Admin: Get all vehicles in the system")
+
+@router.get("/admin/all", response_model=List[VehicleWithOwnerOut], summary="Admin: Get all vehicles in the system (with owner info)")
 async def admin_get_all_vehicles(
     skip: int = 0,
     limit: int = 100,
@@ -80,7 +81,14 @@ async def admin_get_all_vehicles(
 ):
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         raise HTTPException(status_code=403, detail="Access forbidden: Admins only")
-    return await VehicleService.get_all_vehicles(skip=skip, limit=limit)
+    return await VehicleService.admin_get_all_vehicles_with_owner(skip=skip, limit=limit)
+
+
+@router.get("/admin/{vehicle_id}", response_model=VehicleWithOwnerOut, summary="Admin: Get a vehicle by ID (with owner info)")
+async def admin_get_vehicle_by_id(vehicle_id: str, current_user: UserInDB = Depends(get_current_user)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Access forbidden: Admins only")
+    return await VehicleService.admin_get_vehicle_with_owner(vehicle_id)
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut, summary="Get a vehicle by ID")

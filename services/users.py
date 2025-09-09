@@ -30,6 +30,22 @@ class UserService:
             )
 
     @staticmethod
+    async def admin_get_user_by_email(email: str) -> Optional[UserInDB]:
+        """Get user by email from database."""
+        try:
+            user = await db.users_collection.find_one({"email": email.lower()})
+            if user:
+                # Convert ObjectId to string for Pydantic validation
+                user["_id"] = str(user["_id"])
+                return UserOut(**user)  # Return UserOut instead of UserInDB
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user by email {email}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error fetching user"
+            )
+    @staticmethod
     async def get_user_by_id(user_id: str) -> Optional[UserOut]:  # Change return type to UserOut
         """Get user by ID from database."""
         try:

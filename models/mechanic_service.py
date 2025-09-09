@@ -1,3 +1,19 @@
+# Output model for user: mechanic service with mechanic info only
+
+
+# Output model for admin: mechanic service with user and mechanic info
+from models.user import UserOut
+from models.mechanic import MechanicOut
+from models.vehicle import VehicleOut
+
+
+# ...existing code...
+
+# Place this after MechanicServiceOut is defined:
+
+# Output model for admin: mechanic service with user and mechanic info
+
+
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator, model_validator, computed_field
 from typing import Optional, List
@@ -154,63 +170,22 @@ class MechanicServiceIn(MechanicServiceBase):
 
 
 class MechanicServiceOut(MechanicServiceBase):
-    """Output model for mechanic services with additional metadata and computed fields."""
-    
-    id: PyObjectId = Field(
-        ...,
-        alias="_id",
-        description="Unique identifier for the service",
-        examples=["507f1f77bcf86cd799439014"]
-    )
-    created_at: datetime = Field(
-        ...,
-        description="Timestamp when the service was created",
-        examples=["2023-01-01T00:00:00Z"]
-    )
-    updated_at: Optional[datetime] = Field(
-        default=None,
-        description="Timestamp when the service was last updated",
-        examples=["2023-01-02T00:00:00Z"]
-    )
-    feedback: Optional[FeedbackModel] = Field(
-        default=None,
-        description="Feedback associated with this service (if available)"
-    )
+# Ensure class is not empty
+    pass
+# Output model for user: mechanic service with mechanic info only
 
-    @computed_field
-    @property
-    def is_active(self) -> bool:
-        """Whether the service is currently active (not completed or cancelled)."""
-        return self.status not in {ServiceStatus.COMPLETED, ServiceStatus.CANCELLED}
+from models.mechanic import MechanicOut
 
-    @computed_field
-    @property
-    def processing_time(self) -> Optional[timedelta]:
-        """Calculate the time taken to process the service if completed."""
-        if self.status == ServiceStatus.COMPLETED and self.updated_at:
-            return self.updated_at - self.created_at
-        return None
+class MechanicServiceWithMechanicOut(MechanicServiceOut):
+    mechanic: MechanicOut
+    vehicle: VehicleOut
 
-    class Config:
-        from_attributes = True
-        json_encoders = {ObjectId: str}
-        validate_by_name = True
-        json_schema_extra = {
-            "description": "Output model for mechanic services with computed fields",
-            "example": {
-                "_id": "507f1f77bcf86cd799439014",
-                "user_id": "507f1f77bcf86cd799439011",
-                "mechanic_id": "507f1f77bcf86cd799439012",
-                "vehicle_id": "507f1f77bcf86cd799439013",
-                "issue_description": "Engine making strange knocking sounds",
-                "service_type": "repair",
-                "service_cost": 199.99,
-                "estimated_time": "3 hours",
-                "status": "pending",
-                "created_at": "2023-01-01T00:00:00Z",
-                "is_active": True
-            }
-        }
+
+# Output model for admin: mechanic service with user and mechanic info
+class MechanicServiceWithUserAndMechanicOut(MechanicServiceOut):
+    user: UserOut
+    mechanic: MechanicOut
+    vehicle: VehicleOut
 
 
 class MechanicServiceUpdate(BaseModel):

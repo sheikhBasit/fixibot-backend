@@ -207,7 +207,7 @@ async def get_user_by_email(
             detail="Access denied. You can only view your own profile."
         )
     
-    user = await UserService.get_user_by_email(email)
+    user = await UserService.admin_get_user_by_email(email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

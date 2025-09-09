@@ -527,6 +527,65 @@ class VehicleUpdate(BaseVehicleModel):
     )
 
 
+from models.user import UserOut
+
+class VehicleWithOwnerOut(VehicleIn):
+    """Output model for vehicle information with owner details (admin only)."""
+    id: Annotated[
+        PyObjectId,
+        Field(
+            ...,
+            alias="_id",
+            description="Unique vehicle identifier"
+        )
+    ]
+    created_at: Annotated[
+        datetime,
+        Field(
+            ...,
+            description="Timestamp when vehicle was added"
+        )
+    ]
+    owner: UserOut
+
+    @computed_field
+    @property
+    def display_name(self) -> str:
+        """Generate a display-friendly vehicle name."""
+        parts = []
+        if self.brand:
+            parts.append(self.brand)
+        if self.model:
+            parts.append(self.model)
+        if self.year:
+            parts.append(str(self.year))
+        return " ".join(parts) if parts else "Unnamed Vehicle"
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={ObjectId: str},
+        json_schema_extra={
+            "example": {
+                "_id": "507f1f77bcf86cd799439011",
+                "user_id": "507f1f77bcf86cd799439012",
+                "model": "Corolla",
+                "brand": "Toyota",
+                "year": 2020,
+                "created_at": "2023-01-01T00:00:00Z",
+                "display_name": "Toyota Corolla 2020",
+                "owner": {
+                    "_id": "507f1f77bcf86cd799439012",
+                    "first_name": "John",
+                    "last_name": "Doe",
+                    "email": "john.doe@example.com",
+                    "profile_picture": "https://example.com/profile.jpg",
+                    "phone_number": "+1234567890",
+                    "initials": "JD"
+                }
+            }
+        }
+    )
+
 class VehicleOut(VehicleIn):
     """Output model for vehicle information."""
     id: Annotated[
