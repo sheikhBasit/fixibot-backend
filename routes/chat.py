@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from typing import Optional, Union
 from datetime import datetime
-from models.chat import ChatSession
+from pydantic import BaseModel
+from models.chat import ChatSession, ChatMessage
 from models.user import UserInDB
 from models.vehicle import VehicleModel
 from services.chat_service import ChatService
@@ -38,7 +39,7 @@ async def start_chat_session(user: dict = Depends(get_current_user)):
 @router.post("/message")
 async def process_message(
     request: Request,
-    session_id: Optional[str] = Form(None),  # Optional for hybrid approach
+    session_id: Optional[str] = Form(None),
     message: str = Form(...),
     user: dict = Depends(get_current_user),
     image: Optional[Union[UploadFile, str]] = File(None),
@@ -64,7 +65,7 @@ async def process_message(
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid vehicle data: {str(e)}")
 
-        # 3. Handle image upload if present and valid
+        # 3. Handle image upload
         image_url = None
         if isinstance(image, UploadFile) and image.filename:
             try:
@@ -82,13 +83,9 @@ async def process_message(
                 raise HTTPException(status_code=500, detail="Failed to process uploaded image")
 
         # 4. Add user message to chat history
-        chat_session.chat_history.append({
-            "role": "user",
-            "content": message,
-            "timestamp": datetime.now()
-        })
+        chat_session.chat_history.append(ChatMessage(role="user", content=message))
 
-        # 5. Generate assistant response via ChatService
+        # 5. Generate assistant response
         chat_service = ChatService(request)
         response_data = await chat_service.process_message(
             session=chat_session,
@@ -102,29 +99,30 @@ async def process_message(
         chat_session = response_data.get("updated_session", chat_session)
 
         # 6. Add assistant response to chat history
-        chat_session.chat_history.append({
-            "role": "assistant",
-            "content": assistant_response,
-            "timestamp": datetime.now()
-        })
+        chat_session.chat_history.append(ChatMessage(role="assistant", content=assistant_response))
 
         # 7. Update chat title if not set
         if not chat_session.chat_title and message:
             chat_session.chat_title = await ChatService.generate_chat_title(message)
 
-        # 8. Save updated session to DB
-        await SessionManager.update_chat_session(
-            session_id,
-            {
-                "chat_history": chat_session.chat_history,
-                "vehicle_info": vehicle,
-                "image_history": chat_session.image_history,
-                "chat_title": chat_session.chat_title,
-                "updated_at": datetime.now()
-            }
-        )
+        # 8. Prepare update data - CONVERT VehicleModel TO DICT
+        update_data = {
+            "chat_history": [
+                msg.model_dump() if isinstance(msg, BaseModel) else msg
+                for msg in chat_session.chat_history
+            ],
+            "image_history": chat_session.image_history,
+            "chat_title": chat_session.chat_title,
+            "updated_at": datetime.now()
+        }
+        
+        if vehicle:
+            update_data["vehicle_info"] = vehicle.model_dump()  # ✅ Convert to dict
 
-        # 9. Return response
+        # 9. Save updated session to DB
+        await SessionManager.update_chat_session(session_id, update_data)
+
+        # 10. Return response
         return JSONResponse(
             content={
                 "response": assistant_response,
@@ -139,7 +137,6 @@ async def process_message(
     except Exception as e:
         logger.error(f"Unexpected error in process_message: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
-
 
 @router.get("/sessions")
 async def get_chat_sessions(user: UserInDB = Depends(get_current_user)):

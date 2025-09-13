@@ -2,7 +2,15 @@ from pydantic_settings import BaseSettings
 from pydantic import AnyUrl
 from typing import List
 
+# class ClipEmbeddings:
+#     def embed_documents(self, texts):
+#         return [embed_text(text) for text in texts]
+    
+#     def embed_query(self, text):
+#         return embed_text(text)
+
 class Settings(BaseSettings):
+
     ENVIRONMENT: str = "development"
     APP_NAME: str = "FIXIBOT"
     ALLOWED_ORIGINS: List[str] = ["*"]
@@ -31,7 +39,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     HF_TOKEN: str
     USE_ML_VALIDATION: bool = True
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # EMBEDDING_MODEL = ClipEmbeddings()
+    # EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     VECTORSTORE_PATH: str = "data/vectorstore.faiss"
     KNOWLEDGE_BASE_PDF: str = "data/Vehicle_Breakdown_Queries.pdf"
     VECTOR_CACHE_DIR: str = ".vector_cache"

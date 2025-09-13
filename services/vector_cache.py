@@ -12,12 +12,15 @@ import numpy as np
 from PIL import Image
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
+from config import settings
 
 class VectorCache:
     def __init__(self, cache_dir: str = ".vector_cache"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
-        self.model_version = "clip-vit-base-patch32-v2"  # Increment when model changes
+        self.model_version = "clip-vit-base-patch32-v2"
+    
+
 
     def get_cache_key(self, pdf_path: str) -> str:
         """Generate unique cache key based on file content and model version"""
@@ -45,11 +48,11 @@ class VectorCache:
     def load_from_cache(self, cache_key: str) -> Tuple[FAISS, dict]:
         """Load cached embeddings and metadata"""
         try:
-            # Load FAISS index
+            # Load FAISS index WITHOUT embedding function
             vector_store = FAISS.load_local(
                 str(self.cache_dir),
                 index_name=cache_key,
-                embeddings=None,
+                embeddings=None,  # ✅ This is correct for manually created indexes
                 allow_dangerous_deserialization=True
             )
 

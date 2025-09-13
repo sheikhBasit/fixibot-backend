@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
@@ -11,6 +12,27 @@ import shutil
 import os
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+@router.get("/analytics/services")
+async def get_dashboard_metrics(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard metrics (service analytics)"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_metrics()
+
+@router.get("/analytics/activity")
+async def get_dashboard_activity(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard recent activity"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_activity()
+
+@router.get("/analytics/notifications")
+async def get_dashboard_notifications(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard notifications"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_notifications()
 
 @router.patch("/users/{user_id}/status")
 async def update_user_status(
@@ -384,3 +406,32 @@ async def get_user_activity_audit(
         raise HTTPException(status_code=403, detail="Admin access required")
     
     return await AdminService.get_user_activity_audit(user_id, time_range)
+
+@router.get("/analytics/services")
+async def get_dashboard_metrics(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard metrics (service analytics)"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_metrics()
+
+@router.get("/analytics/activity")
+async def get_dashboard_activity(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard recent activity"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_activity()
+
+@router.get("/analytics/notifications")
+async def get_dashboard_notifications(current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Get dashboard notifications"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return await AdminService.get_dashboard_notifications()
+
+@router.post("/admin/clear-cache")
+async def clear_cache_endpoint():
+    """Admin endpoint to clear vector cache"""
+    from services.vector_cache import VectorCache
+    cache = VectorCache(settings.VECTOR_CACHE_DIR)
+    cache.clear_cache()
+    return {"message": "Cache cleared successfully"}

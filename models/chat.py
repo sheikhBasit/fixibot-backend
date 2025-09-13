@@ -1,14 +1,12 @@
 from typing import Optional, List, Dict, Any, Literal, Union, TypedDict, Protocol
 import uuid
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import json
 from pathlib import Path
 import logging
 from models.vehicle import VehicleModel
 from typing import  runtime_checkable
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field
 from bson import ObjectId
 
 from utils.py_object import PyObjectId
@@ -27,6 +25,7 @@ class DiagnosisResponse(TypedDict):
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     @field_validator('role')
     @classmethod
@@ -179,10 +178,9 @@ class ChatSession(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     chat_title: Optional[str] = "New Chat"
     chat_history: List[ChatMessage] = []
-    vehicle_info: Optional[VehicleModel] = None
+    vehicle_info: Optional[Union[VehicleModel, dict]] = None  
     image_history: List[str] = []
 
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
-

@@ -546,6 +546,13 @@ class VehicleWithOwnerOut(VehicleIn):
             description="Timestamp when vehicle was added"
         )
     ]
+    images: Annotated[  # Added images field
+        List[str],
+        Field(
+            description="List of image URLs for the vehicle",
+            examples=[["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"]]
+        )
+    ]
     owner: UserOut
 
     @computed_field
@@ -573,6 +580,7 @@ class VehicleWithOwnerOut(VehicleIn):
                 "year": 2020,
                 "created_at": "2023-01-01T00:00:00Z",
                 "display_name": "Toyota Corolla 2020",
+                "images": ["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"], # Example images
                 "owner": {
                     "_id": "507f1f77bcf86cd799439012",
                     "first_name": "John",
@@ -585,7 +593,6 @@ class VehicleWithOwnerOut(VehicleIn):
             }
         }
     )
-
 class VehicleOut(VehicleIn):
     """Output model for vehicle information."""
     id: Annotated[
@@ -601,6 +608,13 @@ class VehicleOut(VehicleIn):
         Field(
             ...,
             description="Timestamp when vehicle was added"
+        )
+    ]
+    images: Annotated[  # Added images field
+        List[str],
+        Field(
+            description="List of image URLs for the vehicle",
+            examples=[["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"]]
         )
     ]
 
@@ -628,11 +642,11 @@ class VehicleOut(VehicleIn):
                 "brand": "Toyota",
                 "year": 2020,
                 "created_at": "2023-01-01T00:00:00Z",
-                "display_name": "Toyota Corolla 2020"
+                "display_name": "Toyota Corolla 2020",
+                "images": ["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"] # Example images
             }
         }
     )
-
 
 class VehicleSearch(BaseModel):
     """Model for searching/filtering vehicles."""

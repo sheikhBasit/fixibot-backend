@@ -7,28 +7,26 @@ import requests
 from pathlib import Path
 from typing import Union
 from PIL import Image
-from openai import OpenAI
+from openai import AsyncOpenAI
+import asyncio
+from typing import Optional
 
 
 class ImageAnalyzer:
     def __init__(self, hf_token: str = None):
         """Initialize the ImageAnalyzer with robust error handling and validation."""
-        self._setup_logging_header("Initializing ImageAnalyzer")
-        
         # Store the token (either provided or from environment)
         self.hf_token = hf_token or os.getenv("HF_TOKEN")
         if not self.hf_token:
             raise ValueError("HF_TOKEN must be provided either as argument or in environment")
             
-        # Initialize client with retries
-        self.client = self._initialize_client()
+        # Client will be initialized asynchronously
+        self.client: Optional[AsyncOpenAI] = None
         
         # Configuration parameters
         self.max_retries = 3
         self.timeout = 30
         self.retry_delay = 1  # seconds
-        
-        self._setup_logging_footer("Analyzer ready")
 
     def _setup_logging_header(self, message: str):
         """Helper for consistent debug logging headers."""
@@ -58,20 +56,26 @@ class ImageAnalyzer:
             self._log_critical_error("Environment validation failed", e)
             raise
 
-    def _initialize_client(self):
+    async def initialize(self):
+        """Asynchronously initialize and validate the OpenAI client."""
+        self._setup_logging_header("Initializing ImageAnalyzer")
+        self.client = await self._initialize_client()
+        self._setup_logging_footer("Analyzer ready")
+
+    async def _initialize_client(self) -> AsyncOpenAI:
         """Initialize and validate the OpenAI client with retries."""
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 print(f"[DEBUG] Client initialization attempt {attempt + 1}/{max_attempts}")
                 
-                client = OpenAI(
+                client = AsyncOpenAI(
                     base_url="https://router.huggingface.co/v1",
                     api_key=self.hf_token  # Use the stored token
                 )
                 
                 # Immediate test of the client
-                test_response = client.chat.completions.create(
+                test_response = await client.chat.completions.create(
                     model="zai-org/GLM-4.1V-9B-Thinking",
                     messages=[{"role": "user", "content": "Hello"}],
                     max_tokens=10
@@ -89,7 +93,7 @@ class ImageAnalyzer:
                     raise
                 
                 print(f"[WARNING] Attempt {attempt + 1} failed, retrying...")
-                time.sleep(self.retry_delay)
+                await asyncio.sleep(self.retry_delay)
 
     def _log_critical_error(self, context: str, error: Exception):
         """Standardized error logging for critical failures."""
@@ -101,7 +105,7 @@ class ImageAnalyzer:
             print(f"[DEBUG] Response status: {getattr(error.response, 'status_code', 'N/A')}")
             print(f"[DEBUG] Response text: {getattr(error.response, 'text', 'N/A')[:200]}...")
 
-    def analyze(self, image_input: Union[str, Image.Image, bytes], prompt: str = None, vehicle_info: dict = None) -> str:
+    async def analyze(self, image_input: Union[str, Image.Image, bytes], prompt: str = None, vehicle_info: dict = None) -> str:
         """
         Robust image analysis with comprehensive error handling and retries.
         
@@ -113,6 +117,9 @@ class ImageAnalyzer:
         Returns:
             Analysis result as string or error message if analysis fails
         """
+        if not self.client:
+            raise RuntimeError("ImageAnalyzer not initialized. Call await .initialize() first.")
+
         self._setup_logging_header("Starting image analysis")
         print(f"[DEBUG] Input type: {type(image_input)}")
         
@@ -124,7 +131,7 @@ class ImageAnalyzer:
             image_url = self._prepare_image(image_input)
             
             # Perform the analysis with retries
-            return self._perform_analysis_with_retries(base_prompt, image_url)
+            return await self._perform_analysis_with_retries(base_prompt, image_url)
             
         except Exception as e:
             error_msg = self._handle_analysis_error(e)
@@ -287,8 +294,10 @@ class ImageAnalyzer:
         except Exception as e:
             raise ValueError(f"Bytes processing error: {str(e)}") from e
 
-    def _perform_analysis_with_retries(self, prompt: str, image_url: str) -> str:
+    async def _perform_analysis_with_retries(self, prompt: str, image_url: str) -> str:
         """Perform the actual analysis with retry logic."""
+        if not self.client:
+            raise RuntimeError("ImageAnalyzer not initialized.")
         for attempt in range(self.max_retries):
             try:
                 print(f"\n[DEBUG] Analysis attempt {attempt + 1}/{self.max_retries}")
@@ -296,7 +305,7 @@ class ImageAnalyzer:
                 print(f"[DEBUG] Image URL: {image_url[:100]}...")
                 
                 start_time = time.time()
-                response = self.client.chat.completions.create(
+                response = await self.client.chat.completions.create(
                     model="zai-org/GLM-4.1V-9B-Thinking",
                     messages=[{
                         "role": "user",
@@ -319,7 +328,7 @@ class ImageAnalyzer:
                 if attempt == self.max_retries - 1:
                     raise  # Re-raise the last error after all retries
                 
-                time.sleep(self.retry_delay)
+                await asyncio.sleep(self.retry_delay)
 
     def _process_response(self, response) -> str:
         """Process and validate the API response."""

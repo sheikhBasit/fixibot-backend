@@ -12,6 +12,7 @@ from middlewares.limit_handler import LimitRequestSizeMiddleware
 from middlewares.logging_handler import LoggingMiddleware
 from middlewares.security_handler import SecurityHeadersMiddleware
 from services.diagnostic_agent import create_diagnostic_agent
+from services.multimodal_embeddings import initialize_clip_model
 from services.image_analyzer import ImageAnalyzer
 # from services.vectorstore import process_pdf_with_images
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -50,27 +51,31 @@ async def initialize_services():
 
             # Initialize image analyzer
             logger.info("Initializing image analyzer...")
-            app.state.image_analyzer = ImageAnalyzer(hf_token=settings.HF_TOKEN)
+            analyzer = ImageAnalyzer(hf_token=settings.HF_TOKEN)
+            await analyzer.initialize()
+            app.state.image_analyzer = analyzer
             logger.info("Image analyzer initialized successfully")
 
-            # Process PDF and create vector store
-            # logger.info(f"Processing PDF from {settings.KNOWLEDGE_BASE_PDF}...")
-            # app.state.vectorstore, app.state.image_data_store = process_pdf_with_images(
-            #     settings.KNOWLEDGE_BASE_PDF,
-            #     cache_dir=settings.VECTOR_CACHE_DIR,
-            #     force_reprocess=(attempt > 0)
-            # )
             # Load FAISS index and image data from cache
             logger.info("Loading FAISS index and image data from cache...")
             from services.vector_cache import VectorCache
 
             cache = VectorCache(settings.VECTOR_CACHE_DIR)
             cache_key = cache.get_cache_key(settings.KNOWLEDGE_BASE_PDF)
-            app.state.vectorstore, app.state.image_data_store = cache.load_from_cache(cache_key)
-            logger.info("Vectorstore loaded successfully from cache.")
-
-            logger.info("PDF processing and vector store creation completed successfully")
             
+            # Check if cache exists, if not create it
+            if cache.cache_exists(cache_key):
+                app.state.vectorstore, app.state.image_data_store = cache.load_from_cache(cache_key)
+                logger.info("Vectorstore loaded successfully from cache.")
+            else:
+                logger.info("Cache not found, processing PDF...")
+                from services.vectorstore import process_pdf_with_images
+                app.state.vectorstore, app.state.image_data_store = process_pdf_with_images(
+                    settings.KNOWLEDGE_BASE_PDF,
+                    cache_dir=settings.VECTOR_CACHE_DIR
+                )
+                logger.info("Vectorstore created successfully")
+
             logger.info("All services initialized successfully")
             return True
 
@@ -80,6 +85,7 @@ async def initialize_services():
                 logger.critical("Max retries reached. Continuing without some services.")
                 return False
             await asyncio.sleep(retry_delay)
+            
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -95,6 +101,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Initializing application services...")
         if not await initialize_services():
             raise RuntimeError("Failed to initialize services after multiple attempts")
+
+        # Eagerly load the CLIP model
+        logger.info("Initializing CLIP model on startup...")
+        initialize_clip_model()
+        logger.info("CLIP model loaded successfully.")
 
         # Setup MongoDB geospatial index and migrate existing data
         from services.mechanics import MechanicService

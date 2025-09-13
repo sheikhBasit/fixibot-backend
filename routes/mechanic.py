@@ -1,3 +1,4 @@
+
 from datetime import datetime, time
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
@@ -9,6 +10,20 @@ from services.mechanics import MechanicService
 from services.cloudinary import upload_image
 from utils.user import get_current_user
 import logging
+
+router = APIRouter(prefix="/mechanics", tags=["Mechanics"])
+logger = logging.getLogger(__name__)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+
+@router.delete("/admin/{mechanic_id}", summary="Admin: Delete mechanic by ID")
+async def delete_mechanic_admin(mechanic_id: str, current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Delete a mechanic by their ID."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    success = await MechanicService.delete_mechanic(mechanic_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Mechanic not found or could not be deleted")
+    return {"message": "Mechanic deleted successfully"}
 
 router = APIRouter(prefix="/mechanics", tags=["Mechanics"])
 logger = logging.getLogger(__name__)

@@ -1,8 +1,9 @@
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta, datetime, timezone
 from typing import   List, Optional, Union
-from models.user import GoogleSignInRequest, UpdateUser, UserCreate, UserInDB, UserOut, Token, UserRole, VerifyOTPRequest
+from models.user import AdminUserOut, GoogleSignInRequest, UpdateUser, UserCreate, UserInDB, UserOut, Token, UserRole, VerifyOTPRequest
 from services.users import UserService
 from database import db
 from services.mail import send_password_reset_email, send_verification_email
@@ -59,7 +60,13 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @router.get("/users/me", response_model=UserOut)
 async def read_users_me(current_user: UserInDB = Depends(get_current_user)):
     """Get current user's profile."""
-    return current_user
+    user_dict = current_user.model_dump(by_alias=True)
+    # Ensure both id and _id are strings for Pydantic validation
+    if "id" in user_dict and not isinstance(user_dict["id"], str):
+        user_dict["id"] = str(user_dict["id"])
+    if "_id" in user_dict and not isinstance(user_dict["_id"], str):
+        user_dict["_id"] = str(user_dict["_id"])
+    return UserOut.model_validate(user_dict)
 
 
 @router.post("/verify-email")
@@ -123,7 +130,7 @@ async def delete_account(current_user: UserInDB = Depends(get_current_user)):
         )
     return {"message": "Account deleted"}
 
-@router.get("/admin/users", response_model=List[UserOut], summary="Admin: Get all users")
+@router.get("/admin/users", response_model=List[AdminUserOut], summary="Admin: Get all users")
 async def get_all_users_admin(
     limit: int = Query(100, gt=0, le=1000),
     skip: int = Query(0, ge=0),
@@ -287,6 +294,15 @@ async def get_user_by_email_admin(
     return user
 
 
+@router.delete("/admin/users/{user_id}", summary="Admin: Delete user by ID")
+async def delete_user_admin(user_id: str, current_user: UserInDB = Depends(get_current_user)):
+    """Admin: Delete a user by their ID."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    success = await UserService.delete_user(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found or could not be deleted")
+    return {"message": "User deleted successfully"}
 
 @router.put("/admin/users/{user_id}", response_model=UserOut, summary="Admin: Update any user")
 async def update_user_admin(

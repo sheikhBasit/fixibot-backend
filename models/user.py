@@ -508,6 +508,101 @@ class VerifyOTPRequest(BaseModel):
         }
     )
 
+class AdminUserOut(BaseModel):
+    """Output model for admin user data."""
+    id: Annotated[
+        str,
+        Field(
+            ...,
+            alias="_id",
+            description="Unique user identifier",
+            examples=["507f1f77bcf86cd799439011"]
+        )
+    ]
+    first_name: Annotated[
+        str,
+        Field(
+            ...,
+            description="User's first name"
+        )
+    ]
+    last_name: Annotated[
+        str,
+        Field(
+            ...,
+            description="User's last name"
+        )
+    ]
+    email: Annotated[
+        str,
+        Field(
+            ...,
+            description="User's email address"
+        )
+    ]
+    phone_number: Annotated[
+        Optional[str],
+        Field(
+            None,
+            description="User's phone number"
+        )
+    ]
+    created_at: Annotated[
+        datetime,
+        Field(
+            ...,
+            description="Account creation timestamp"
+        )
+    ]
+    updated_at: Annotated[
+        datetime,
+        Field(
+            ...,
+            description="Account last update timestamp"
+        )
+    ]
+    is_verified: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether the user is verified"
+        )
+    ]
+    is_active: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Account active status"
+        )
+    ]
+
+    @computed_field
+    @property
+    def name(self) -> str:
+        """Combine first and last name into a single name field."""
+        # Note: Your provided data has 'full_name' which you could also use,
+        # but this computed field is more robust if first_name/last_name are the source of truth.
+        return f"{self.first_name} {self.last_name}"
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        json_encoders={ObjectId: str},
+        json_schema_extra={
+            "description": "Admin user data",
+            "example": {
+                "id": "507f1f77bcf86cd799439011",
+                "email": "john.doe@example.com",
+                "first_name": "John",
+                "last_name": "Doe",
+                "phone_number": "+1234567890",
+                "created_at": "2023-10-27T10:00:00Z",
+                "updated_at": "2023-10-28T11:00:00Z",
+                "is_verified": True,
+                "is_active": True
+            }
+        }
+    )
 
 class GoogleSignInRequest(BaseModel):
     token: str

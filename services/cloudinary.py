@@ -1,4 +1,3 @@
-import onnxruntime
 import numpy as np
 from PIL import Image, ImageStat, UnidentifiedImageError, ImageFilter
 import io
@@ -9,6 +8,7 @@ from uuid import uuid4
 from typing import Any, Tuple, Optional
 from config import settings
 import asyncio
+import threading
 import re
 
 # Configure Cloudinary
@@ -20,6 +20,9 @@ cloudinary.config(
 )
 
 class ImageValidator:
+    _instance = None
+    _lock = threading.Lock()
+
     def __init__(self):
         # Document type configuration
         self.document_config = {
@@ -112,20 +115,31 @@ class ImageValidator:
             450: ('bus', 0.5)    # Regular bus
         }
 
-        # Initialize ONNX model if available
+        # Defer ONNX model initialization
         self.ml_enabled = False
+        self.session = None
+        self.input_name = None
+        self.input_shape = None
+        self._model_lock = threading.Lock()
+
+    def _initialize_model(self):
+        """Initializes the ONNX model if it hasn't been already."""
         if settings.USE_ML_VALIDATION:
-            try:
-                self.session = onnxruntime.InferenceSession(
-                    "mobilenetv2-7.onnx",
-                    providers=['CPUExecutionProvider']
-                )
-                self.input_name = self.session.get_inputs()[0].name
-                self.input_shape = self.session.get_inputs()[0].shape
-                self.ml_enabled = True
-                print(f"ML model loaded. Expected input shape: {self.input_shape}")
-            except Exception as e:
-                print(f"ONNX model initialization failed: {e}")
+            with self._model_lock:
+                if self.session is None:
+                    print("[INFO] Initializing ONNX model for the first time...")
+                    import onnxruntime
+                    try:
+                        self.session = onnxruntime.InferenceSession(
+                            "mobilenetv2-7.onnx",
+                            providers=['CPUExecutionProvider']
+                        )
+                        self.input_name = self.session.get_inputs()[0].name
+                        self.input_shape = self.session.get_inputs()[0].shape
+                        self.ml_enabled = True
+                    except Exception as e:
+                        print(f"ONNX model initialization failed: {e}")
+                        self.ml_enabled = False
 
     def resize_image(self, image: Image.Image, max_size: Tuple[int, int]) -> Image.Image:
         """Optimized image resizing with aspect ratio preservation"""
@@ -217,7 +231,10 @@ class ImageValidator:
                 return False
         
         # Then apply ML validation if enabled
-        if self.ml_enabled:
+        if settings.USE_ML_VALIDATION:
+            self._initialize_model()
+            if not self.ml_enabled:
+                return True  # Fallback to heuristics if ML failed to load
             try:
                 ml_result = await asyncio.wait_for(
                     self._ml_analysis(img, expected_type),
@@ -261,6 +278,10 @@ class ImageValidator:
     async def _ml_analysis(self, img: Image.Image, expected_type: str) -> bool:
         """Run ML prediction with proper validation"""
         try:
+            if not self.session:
+                print("[WARNING] ML analysis called but session is not initialized.")
+                return True  # Default to passing if model isn't ready
+
             # Convert to RGB if needed
             if img.mode != 'RGB':
                 img = img.convert('RGB')
@@ -368,7 +389,13 @@ async def upload_image(file: UploadFile, expected_type: str = 'other') -> str:
     - Comprehensive validation
     - Proper timeout handling
     """
-    validator = ImageValidator()
+    # Lazily initialize a singleton validator to avoid reloading the model
+    with ImageValidator._lock:
+        if ImageValidator._instance is None:
+            print("[INFO] Creating ImageValidator singleton instance.")
+            ImageValidator._instance = ImageValidator()
+    
+    validator = ImageValidator._instance
     
     # Validate with timeout
     try:

@@ -15,6 +15,16 @@ from utils.time import utc_now
 logger = logging.getLogger("mechanic_services")
 
 class MechanicService:
+
+    @staticmethod
+    async def delete_mechanic(mechanic_id: str) -> bool:
+        """Delete a mechanic by ID (admin only)."""
+        try:
+            result = await db.mechanics_collection.delete_one({"_id": PyObjectId(mechanic_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f"Error deleting mechanic {mechanic_id}: {e}")
+            return False
     @staticmethod
     async def create_mechanic(mechanic_data: MechanicIn) -> MechanicOut:
         """Create a new mechanic in the database."""

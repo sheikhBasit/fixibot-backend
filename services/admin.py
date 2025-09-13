@@ -13,6 +13,42 @@ logger = logging.getLogger(__name__)
 
 class AdminService:
     @staticmethod
+    async def get_dashboard_metrics():
+        # TODO: Replace with real analytics aggregation
+        return {
+            "revenue_data": [
+                {"month": "Jan", "revenue": 1000},
+                {"month": "Feb", "revenue": 1200},
+                {"month": "Mar", "revenue": 900},
+            ],
+            "completion_rate": 92,
+            "avg_response_time": 15,
+            "satisfaction_score": 4.7,
+            "mechanic_utilization": 78
+        }
+
+    @staticmethod
+    async def get_dashboard_activity():
+        # TODO: Replace with real activity log aggregation
+        return {
+            "recent_activities": [
+                {"type": "user_registration", "description": "New user registered", "timestamp": "2025-09-10T10:00:00Z", "status": "completed"},
+                {"type": "service_request", "description": "Service requested", "timestamp": "2025-09-10T11:00:00Z", "status": "pending"},
+                {"type": "system_alert", "description": "System alert: High CPU usage", "timestamp": "2025-09-10T12:00:00Z", "status": "completed"},
+            ]
+        }
+
+    @staticmethod
+    async def get_dashboard_notifications():
+        # TODO: Replace with real notification aggregation
+        return {
+            "notifications": [
+                {"title": "System Maintenance", "message": "Scheduled maintenance at 2 AM", "priority": "high", "timestamp": "2025-09-10T09:00:00Z"},
+                {"title": "New Feature", "message": "Analytics dashboard launched", "priority": "medium", "timestamp": "2025-09-09T15:00:00Z"},
+                {"title": "Reminder", "message": "Update your profile", "priority": "low", "timestamp": "2025-09-08T08:00:00Z"},
+            ]
+        }
+    @staticmethod
     async def get_dashboard_overview() -> Dict[str, Any]:
         """Get comprehensive dashboard overview statistics"""
         try:

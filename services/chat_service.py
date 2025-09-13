@@ -1,3 +1,4 @@
+from services.multimodal_embeddings import embed_text
 from fastapi import Request
 from langchain_core.runnables import (
     RunnableSerializable,
@@ -23,7 +24,7 @@ class ChatService:
         
     def _create_processing_chain(self) -> RunnableSerializable[Dict[str, Any], Dict[str, Any]]:
         """Create the complete processing chain with error handling"""
-        def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        async def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Process images using the image analyzer"""
             try:
                 if not inputs.get("image_url"):
@@ -32,7 +33,7 @@ class ChatService:
                 vehicle_info = inputs.get("vehicle", {})
                 user_question = inputs.get("prompt", "Analyze this vehicle image")
                 
-                analysis = self.image_analyzer.analyze(
+                analysis = await self.image_analyzer.analyze(
                     inputs["image_url"],
                     prompt=user_question,
                     vehicle_info=vehicle_info
@@ -51,7 +52,7 @@ class ChatService:
 
                 # Get last 2 user messages for context
                 history_context = "\n".join(
-                    [msg["content"] for msg in chat_history[-4:] if msg["role"] == "user"]
+                    [msg.content for msg in chat_history[-4:] if hasattr(msg, 'role') and msg.role == "user"]
                 )
 
                 enhanced_question = (
@@ -60,19 +61,24 @@ class ChatService:
                     f"Current Problem: {prompt}"
                 )
 
-                retriever = self.vectorstore.as_retriever(
-                    search_kwargs={
-                        "k": 3,
-                        "filter": {"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
-                    }
+                # MANUAL EMBEDDING AND SEARCH (instead of .as_retriever())
+                query_embedding = embed_text(enhanced_question)
+                print(f"DEBUG: Generated query embedding (first 10 elements): {query_embedding[:10]}")
+                
+                # Manual similarity search
+                docs_and_scores = self.vectorstore.similarity_search_by_vector(
+                    query_embedding,
+                    k=3,
+                    filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 )
-                docs = retriever.invoke(enhanced_question)
                 
                 # Combine text and image context
-                text_context = "\n---\n".join([doc.page_content for doc in docs])
+                text_context = "\n---\n".join([doc.page_content for doc in docs_and_scores])
+                print(f"Retrieved {len(docs_and_scores)} documents for context")
+                print(f"Text context: {text_context[:500]}...")  # Print first 500 chars
                 multimodal_context = []
                 
-                for doc in docs:
+                for doc in docs_and_scores:
                     if doc.metadata.get("type") == "image":
                         image_id = doc.metadata.get("image_id")
                         if image_id in self.image_data_store:
@@ -91,7 +97,6 @@ class ChatService:
             except Exception as e:
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
                 return {**inputs, "context_2": "Knowledge retrieval failed"}
-
         def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:
@@ -103,6 +108,14 @@ class ChatService:
                     "fuel_type": vehicle.get("fuel_type", "Unknown"),
                     "engine_type": vehicle.get("engine_type", "Unknown")
                 }
+                
+                # Convert ChatMessage objects to dict for the LLM
+                chat_history_dicts = []
+                for msg in inputs.get("chat_history", []):
+                    if hasattr(msg, 'model_dump'):
+                        chat_history_dicts.append(msg.model_dump())
+                    else:
+                        chat_history_dicts.append(msg)
                 
                 llm_input = {
                     "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
@@ -117,7 +130,7 @@ class ChatService:
                     Multimodal Context:
                     {inputs.get('multimodal_context', 'No additional context')}
                     """,
-                    "chat_history": inputs.get("chat_history", [])
+                    "chat_history": chat_history_dicts  # Use converted dicts
                 }
                 
                 response = self.diagnostic_agent.invoke(llm_input)
@@ -125,7 +138,7 @@ class ChatService:
             except Exception as e:
                 logger.error(f"Diagnostic failed: {e}", exc_info=True)
                 return {**inputs, "diagnosis_output": "Diagnostic service unavailable"}
-
+        
         return (
             RunnablePassthrough()
             | RunnableLambda(image_analysis_chain)
@@ -178,13 +191,6 @@ Guidelines:
             - updated_session: Updated chat session
         """
         try:
-            # Add user message to history
-            session.chat_history.append({
-                "role": "user",
-                "content": user_input,
-                "timestamp": datetime.now()
-            })
-            
             if image_url:
                 session.image_history.append(image_url)
             
@@ -204,14 +210,7 @@ Guidelines:
             
             # Handle response
             diagnosis = result.get("diagnosis_output", "")
-            if diagnosis:
-                session.chat_history.append({
-                    "role": "assistant",
-                    "content": diagnosis,
-                    "timestamp": datetime.now()
-                })
-                
-            # Generate title if first message
+                # Generate title if first message
             if len(session.chat_history) <= 2 and not session.chat_title:
                 session.chat_title = await self.generate_chat_title(user_input)
                 

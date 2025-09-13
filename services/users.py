@@ -1,5 +1,5 @@
 from fastapi.encoders import jsonable_encoder
-from models.user import UserCreate, UserInDB, UserOut
+from models.user import UserCreate, UserInDB, UserOut, AdminUserOut
 from database import db
 from utils.py_object import PyObjectId
 
@@ -265,13 +265,14 @@ class UserService:
  
 
     @staticmethod
-    async def get_all_users(limit: int = 100, skip: int = 0) -> List[UserOut]:
+    async def get_all_users(limit: int = 100, skip: int = 0) -> List[AdminUserOut]:
         """Get all users with pagination"""
         users = await db.users_collection.find().skip(skip).limit(limit).to_list(length=None)
         # Convert ObjectId to string for each user
+        print(users)
         for user in users:
             user["_id"] = str(user["_id"])
-        return [UserOut(**user) for user in users]
+        return [AdminUserOut(**user) for user in users]
 
     @staticmethod
     async def search_users(
