@@ -1,4 +1,5 @@
-from fastapi import Depends, HTTPException, Request
+from fastapi import Request, HTTPException
+from services.intent_classifier import IntentClassifier
 
 def get_diagnostic_agent(request: Request):
     agent = getattr(request.app.state, "diagnostic_agent", None)
@@ -18,3 +19,9 @@ def get_vectorstore(request: Request):
     if not vectorstore:
         raise HTTPException(status_code=500, detail="Vectorstore not initialized")
     return vectorstore, image_data_store
+
+def get_intent_classifier(request: Request):
+    classifier = getattr(request.app.state, "intent_classifier", None)
+    if not classifier:
+        raise HTTPException(status_code=500, detail="Intent classifier not initialized")
+    return classifier

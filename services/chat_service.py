@@ -3,14 +3,17 @@ from fastapi import Request
 from langchain_core.runnables import (
     RunnableSerializable,
     RunnablePassthrough,
+    RunnableBranch,
     RunnableLambda,
 )
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 import logging
-from models.chat import ChatSession  # Updated to use ChatSession instead of ChatState
+from models.chat import ChatSession
 from models.vehicle import VehicleModel
 from config import settings
 from services.dependencies import get_diagnostic_agent, get_image_analyzer, get_vectorstore
+from services.intent_classifier import get_intent_classifier
+from services.simple_responses import SimpleResponseGenerator
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -20,10 +23,63 @@ class ChatService:
         self.vectorstore, self.image_data_store = get_vectorstore(request)
         self.diagnostic_agent = get_diagnostic_agent(request)
         self.image_analyzer = get_image_analyzer(request)
+        self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
+    
+    async def _determine_processing_path(self, user_input: str, chat_history: list) -> Literal["simple", "rag", "command"]:
+        """Determine the processing path based on user intent"""
+        intent = await self.intent_classifier.classify_intent(user_input, chat_history)
         
-    def _create_processing_chain(self) -> RunnableSerializable[Dict[str, Any], Dict[str, Any]]:
-        """Create the complete processing chain with error handling"""
+        logger.info(f"Detected intent: {intent} for message: '{user_input}'")
+        
+        if intent in ["greeting", "small_talk"]:
+            return "simple"
+        elif intent in ["technical_question", "vehicle_diagnosis"]:
+            return "rag"
+        elif intent == "command":
+            return "command"
+        else:
+            return "rag"  # Default to RAG for unknown intents
+    
+    def _create_simple_response_chain(self) -> RunnableSerializable:
+        """Chain for simple responses (greetings, small talk)"""
+        async def simple_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            """Generate simple conversational responses"""
+            try:
+                # First try to get a predefined response
+                predefined_response = SimpleResponseGenerator.get_response(
+                    await self.intent_classifier.classify_intent(inputs["prompt"], inputs.get("chat_history", [])),
+                    inputs["prompt"]
+                )
+                
+                if predefined_response:
+                    return {**inputs, "diagnosis_output": predefined_response}
+                
+                # Fallback to LLM for more complex simple responses
+                prompt = f"""
+                User message: "{inputs['prompt']}"
+                
+                Respond naturally and conversationally. Be friendly and helpful.
+                Keep your response brief and appropriate for a vehicle mechanic assistant.
+                If this is small talk or greeting, keep it very short (1-2 sentences).
+                """
+                
+                response = await self.diagnostic_agent.ainvoke({
+                    "system_prompt": "You are a friendly vehicle mechanic assistant. Engage in natural conversation. Keep responses brief for greetings and small talk.",
+                    "input": prompt,
+                    "chat_history": inputs.get("chat_history", []),
+                    "is_simple_response": True
+                })
+                
+                return {**inputs, "diagnosis_output": response}
+            except Exception as e:
+                logger.error(f"Simple response failed: {e}")
+                return {**inputs, "diagnosis_output": "Hello! How can I help with your vehicle today?"}
+        
+        return RunnableLambda(simple_response)
+    
+    def _create_rag_chain(self) -> RunnableSerializable:
+        """Create the RAG processing chain"""
         async def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Process images using the image analyzer"""
             try:
@@ -52,7 +108,7 @@ class ChatService:
 
                 # Get last 2 user messages for context
                 history_context = "\n".join(
-                    [msg.content for msg in chat_history[-4:] if hasattr(msg, 'role') and msg.role == "user"]
+                    [msg.content for msg in chat_history[-4:] if hasattr(msg, 'content')]
                 )
 
                 enhanced_question = (
@@ -61,9 +117,8 @@ class ChatService:
                     f"Current Problem: {prompt}"
                 )
 
-                # MANUAL EMBEDDING AND SEARCH (instead of .as_retriever())
+                # Manual embedding and search
                 query_embedding = embed_text(enhanced_question)
-                print(f"DEBUG: Generated query embedding (first 10 elements): {query_embedding[:10]}")
                 
                 # Manual similarity search
                 docs_and_scores = self.vectorstore.similarity_search_by_vector(
@@ -74,8 +129,6 @@ class ChatService:
                 
                 # Combine text and image context
                 text_context = "\n---\n".join([doc.page_content for doc in docs_and_scores])
-                print(f"Retrieved {len(docs_and_scores)} documents for context")
-                print(f"Text context: {text_context[:500]}...")  # Print first 500 chars
                 multimodal_context = []
                 
                 for doc in docs_and_scores:
@@ -97,6 +150,7 @@ class ChatService:
             except Exception as e:
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
                 return {**inputs, "context_2": "Knowledge retrieval failed"}
+
         def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:
@@ -130,7 +184,8 @@ class ChatService:
                     Multimodal Context:
                     {inputs.get('multimodal_context', 'No additional context')}
                     """,
-                    "chat_history": chat_history_dicts  # Use converted dicts
+                    "chat_history": chat_history_dicts,
+                    "is_simple_response": False
                 }
                 
                 response = self.diagnostic_agent.invoke(llm_input)
@@ -145,6 +200,28 @@ class ChatService:
             | RunnableLambda(retrieval_chain)
             | RunnableLambda(diagnostic_chain)
         )
+
+    def _create_processing_chain(self) -> RunnableSerializable:
+        """Create the complete processing chain with intent-based routing"""
+        
+        async def routing_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            """Route to appropriate processing chain based on intent"""
+            processing_path = await self._determine_processing_path(
+                inputs["prompt"], inputs.get("chat_history", [])
+            )
+            
+            logger.info(f"Routing to: {processing_path} processing")
+            
+            if processing_path == "simple":
+                # Use simple response chain
+                simple_chain = self._create_simple_response_chain()
+                return await simple_chain.ainvoke(inputs)
+            else:
+                # Use full RAG pipeline (for technical_question, vehicle_diagnosis, command, and fallback)
+                rag_chain = self._create_rag_chain()
+                return await rag_chain.ainvoke(inputs)
+        
+        return RunnableLambda(routing_chain)
 
     def _get_vehicle_system_prompt(self, vehicle_info: dict) -> str:
         """Generate system prompt for vehicle diagnosis"""
@@ -162,12 +239,13 @@ You are provided with:
 - Complete chat history for context
 
 Guidelines:
-1. Be professional but friendly
+1. Be professional but friendly and conversational when appropriate
 2. Ask clarifying questions when needed
 3. Provide step-by-step solutions when possible
 4. Reference vehicle-specific information
 5. Maintain conversation context
-6. For complex issues, recommend professional help"""
+6. For complex issues, recommend professional help
+7. Adapt your tone based on the conversation - be more technical for diagnosis, more conversational for greetings"""
 
     async def process_message(
         self,
@@ -210,7 +288,8 @@ Guidelines:
             
             # Handle response
             diagnosis = result.get("diagnosis_output", "")
-                # Generate title if first message
+            
+            # Generate title if first message
             if len(session.chat_history) <= 2 and not session.chat_title:
                 session.chat_title = await self.generate_chat_title(user_input)
                 
@@ -240,7 +319,8 @@ Guidelines:
             response = await self.diagnostic_agent.ainvoke({
                 "system_prompt": "You are a vehicle expert that creates concise, descriptive chat titles.",
                 "input": prompt,
-                "chat_history": []
+                "chat_history": [],
+                "is_simple_response": True
             })
             
             return response.strip('"').strip("'").strip() or "Vehicle Consultation"
