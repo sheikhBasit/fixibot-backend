@@ -166,8 +166,8 @@ class SessionManager:
             ).to_list(None)
             
             print(f"Found {len(sessions)} sessions")
-            for session in sessions:
-                print(f"Session: {session}")
+            # for session in sessions:
+            #     print(f"Session: {session}")
                 
             return [ChatSession(**session) for session in sessions]
         except Exception as e:

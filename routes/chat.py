@@ -185,7 +185,50 @@ async def get_chat_sessions(user: UserInDB = Depends(get_current_user)):
             status_code=500,
             detail=f"Failed to get chat sessions: {str(e)}"
         )
+@router.get("/sessions/{session_id}/chat")
+async def get_chat_history_by_session_id(
+    session_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Fetch the chat history for a specific session ID."""
+    try:
+        # Ensure the session_id is a valid ObjectId for MongoDB
+        session_object_id = ObjectId(session_id)
+        
+        # Retrieve the chat session using the SessionManager
+        chat_session = await SessionManager.get_chat_session(session_object_id)
 
+        if not chat_session:
+            raise HTTPException(status_code=404, detail="Chat session not found.")
+        
+        # Verify that the session belongs to the current user
+        if str(chat_session.user_id) != str(user.id):
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this chat session.")
+
+        # Prepare the response with chat history
+        chat_history = [
+            {"role": msg.role, "content": msg.content, "timestamp": msg.timestamp.isoformat()}
+            for msg in chat_session.chat_history
+        ]
+
+        return JSONResponse(
+            content={
+                "session_id": str(chat_session.id),
+                "chat_title": chat_session.chat_title,
+                "chat_history": chat_history,
+                "updated_at": chat_session.updated_at.isoformat() if chat_session.updated_at else None,
+            },
+            status_code=200
+        )
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions to be handled by FastAPI
+    except Exception as e:
+        # Log the unexpected error for debugging
+        logger.error(f"Unexpected error fetching chat history for session {session_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+    
+    
 async def process_uploaded_image(image: UploadFile) -> str:
     """Process and store uploaded image in Cloudinary"""
     try:
@@ -212,3 +255,4 @@ async def process_uploaded_image(image: UploadFile) -> str:
             status_code=500,
             detail=f"Failed to process image: {str(e)}"
         )
+
