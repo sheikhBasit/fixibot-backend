@@ -1,8 +1,9 @@
+import email
 from fastapi.encoders import jsonable_encoder
 from models.user import UserCreate, UserInDB, UserOut, AdminUserOut
 from database import db
 from utils.py_object import PyObjectId
-
+from datetime import datetime, timezone
 from typing import List, Optional
 import logging
 from fastapi import HTTPException, status
@@ -195,6 +196,8 @@ class UserService:
             logger.error(f"Error verifying email token: {e}")
             return False
 
+    
+
     @staticmethod
     async def reset_password(email: str, token: str, new_password: str) -> bool:
         """Reset user password with token."""
@@ -202,22 +205,35 @@ class UserService:
             user = await UserService.get_user_by_email(email)
             if not user:
                 return False
-                
-            if (user.password_reset_token == token and 
-                user.password_token_expiry and 
-                user.password_token_expiry > datetime.now(timezone.utc)):
-                
+
+            expiry = user.password_token_expiry
+
+        # Normalize expiry to timezone-aware
+            if expiry and expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+
+            if (
+                user.password_reset_token == token
+                and expiry
+                and expiry > datetime.now(timezone.utc)
+            ):
                 hashed_password = get_password_hash(new_password)
                 await db.users_collection.update_one(
-                    {"_id": PyObjectId(user.id)},  # Fix here
-                    {"$set": {"hashed_password": hashed_password},
-                        "$unset": {"password_reset_token": "", "password_token_expiry": ""}}
+                    {"_id": PyObjectId(user.id)},
+                    {
+                        "$set": {"hashed_password": hashed_password},
+                        "$unset": {
+                            "password_reset_token": "",
+                            "password_token_expiry": "",
+                        },
+                    },
                 )
                 return True
             return False
         except Exception as e:
             logger.error(f"Error resetting password: {e}")
             return False
+
     @staticmethod
     async def generate_and_save_token(
         user_id: str, 
