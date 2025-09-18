@@ -20,7 +20,7 @@ def create_diagnostic_agent(api_key: str):
             else:
                 try:
                     # Handle LangChain message objects
-                    if hasattr(inputs, 'messages'):
+                    if hasattr(input    s, 'messages'):
                         messages = inputs.messages
                     elif isinstance(inputs, list):
                         messages = inputs

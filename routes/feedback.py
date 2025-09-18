@@ -1,15 +1,19 @@
 from asyncio.log import logger
 from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import List
+from typing import List, Optional
 from bson import ObjectId, errors as bson_errors
 from datetime import datetime, timezone
 from models.feedback import FeedbackIn, FeedbackModel, FeedbackOut, FeedbackUpdate, FeedbackSearch
-from models.user import UserInDB, UserRole
+from models.user import UserInDB, UserRole, UserOut
 from database import db
 from utils.user import get_current_user
 from services.rating_service import update_mechanic_rating
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
+
+class FeedbackResponse(FeedbackOut):
+    user: Optional[UserOut] = None
+    mechanic: Optional[UserOut] = None
 
 # Dependency to get feedback collection
 async def get_feedback_collection():
@@ -49,7 +53,7 @@ async def create_feedback(
     return FeedbackOut(**created)
 
 # ✅ Get feedback by ID
-@router.get("/{feedback_id}", response_model=FeedbackOut, summary="Get feedback by ID")
+@router.get("/{feedback_id}", response_model=FeedbackResponse, summary="Get feedback by ID")
 async def get_feedback_by_id(
     feedback_id: str,
     current_user: UserInDB = Depends(get_current_user),
@@ -60,11 +64,33 @@ async def get_feedback_by_id(
     except bson_errors.InvalidId:
         raise HTTPException(status_code=400, detail="Invalid feedback ID")
 
-    feedback = await feedback_collection.find_one({"_id": obj_id})
-    if not feedback:
+    pipeline = [
+        {"$match": {"_id": obj_id}},
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "user_id",
+                "foreignField": "_id",
+                "as": "user"
+            }
+        },
+        {"$unwind": {"path": "$user", "preserveNullAndEmptyArrays": True}},
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "mechanic_id",
+                "foreignField": "_id",
+                "as": "mechanic"
+            }
+        },
+        {"$unwind": {"path": "$mechanic", "preserveNullAndEmptyArrays": True}}
+    ]
+    
+    feedback_list = await feedback_collection.aggregate(pipeline).to_list(length=1)
+    if not feedback_list:
         raise HTTPException(status_code=404, detail="Feedback not found")
-
-    return FeedbackOut(**feedback)
+    
+    return FeedbackResponse(**feedback_list[0])
 
 # ✅ Update feedback
 @router.put("/{feedback_id}", response_model=FeedbackOut, summary="Update feedback entry")
@@ -106,7 +132,7 @@ async def delete_feedback(
     raise HTTPException(status_code=404, detail="Feedback not found")
 
 # ✅ Search feedback (with pagination)
-@router.post("/search", response_model=List[FeedbackOut], summary="Search feedback with filters and pagination")
+@router.post("/search", response_model=List[FeedbackResponse], summary="Search feedback with filters and pagination")
 async def search_feedback(
     search: FeedbackSearch,
     skip: int = Query(0, ge=0),
@@ -147,14 +173,42 @@ async def search_feedback(
     if rating_query:
         query["rating"] = rating_query
 
+    pipeline = []
+    if query:
+        pipeline.append({"$match": query})
+    
+    pipeline.extend([
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "user_id",
+                "foreignField": "_id",
+                "as": "user"
+            }
+        },
+        {"$unwind": {"path": "$user", "preserveNullAndEmptyArrays": True}},
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "mechanic_id",
+                "foreignField": "_id",
+                "as": "mechanic"
+            }
+        },
+        {"$unwind": {"path": "$mechanic", "preserveNullAndEmptyArrays": True}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ])
+
     try:
-        results = await feedback_collection.find(query).skip(skip).limit(limit).to_list(length=limit)
-        return [FeedbackOut(**f) for f in results]
+        results = await feedback_collection.aggregate(pipeline).to_list(length=limit)
+        return [FeedbackResponse(**f) for f in results]
     except Exception as e:
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during search")
+
 # ✅ Admin: Get all feedback
-@router.get("/admin/all", response_model=List[FeedbackOut], summary="Admin: Get all feedback entries")
+@router.get("/admin/all", response_model=List[FeedbackResponse], summary="Admin: Get all feedback entries")
 async def get_all_feedback(
     current_user: UserInDB = Depends(get_current_user),
     feedback_collection=Depends(get_feedback_collection)
@@ -162,5 +216,13 @@ async def get_all_feedback(
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    feedbacks = await feedback_collection.find().to_list(length=1000)
-    return [FeedbackOut(**fb) for fb in feedbacks]
+    pipeline = [
+        {"$lookup": {"from": "users", "localField": "user_id", "foreignField": "_id", "as": "user"}},
+        {"$unwind": {"path": "$user", "preserveNullAndEmptyArrays": True}},
+        {"$lookup": {"from": "users", "localField": "mechanic_id", "foreignField": "_id", "as": "mechanic"}},
+        {"$unwind": {"path": "$mechanic", "preserveNullAndEmptyArrays": True}},
+        {"$limit": 1000}
+    ]
+    
+    feedbacks = await feedback_collection.aggregate(pipeline).to_list(length=1000)
+    return [FeedbackResponse(**fb) for fb in feedbacks]

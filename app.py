@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from services.intent_classifier import IntentClassifier
 from services.simple_responses import SimpleResponseGenerator
 # App imports
-from routes import chat, health, mechanic, mechanic_service, self_help, user, vehicle, feedback, ai_service, analytics, admin  
+from routes import chat, health, mechanic, mechanic_service, self_help, user, vehicle, feedback, ai_service, analytics, admin, support  
 from config import settings
 from utils.logging import configure_logging
 from database import connect_to_mongo, close_mongo_connection
@@ -178,6 +178,7 @@ app.include_router(mechanic_service.router)
 app.include_router(user.router)
 app.include_router(analytics.router)
 app.include_router(admin.router)
+app.include_router(support.router)
 # app.include_router(ai_service.router)
 # app.include_router(self_help.router)
 
