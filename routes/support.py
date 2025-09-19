@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from services.mail import send_help_support_email, send_support_response_email
+from pydantic import BaseModel, EmailStr
+from services.mail import send_help_support_email
 from config import settings
 router = APIRouter()
 
 class SupportRequest(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     subject: str
     message: str
 
@@ -22,21 +22,3 @@ async def submit_support_request(request: SupportRequest):
         return {"message": "Support request submitted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to send support request")
-
-@router.post("/support/response")
-async def send_support_response(
-    email: str, 
-    name: str, 
-    ticket_id: str, 
-    response: str
-):
-    try:
-        await send_support_response_email(
-            user_email=email,
-            user_name=name,
-            ticket_id=ticket_id,
-            response_message=response
-        )
-        return {"message": "Support response sent successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to send support response")

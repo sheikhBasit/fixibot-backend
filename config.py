@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     USE_ML_VALIDATION: bool = True
     # EMBEDDING_MODEL = ClipEmbeddings()
     # EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    SUPPORT_EMAIL = "fixibot038@gmail.com"
-    SUPPORT_PHONE = "+1-800-123-4567"
-    SUPPORT_HOURS = "Monday-Friday, 9AM-5PM EST"
+    SUPPORT_EMAIL: str = "fixibot038@gmail.com"
+    SUPPORT_PHONE: str = "+1-800-123-4567"
+    SUPPORT_HOURS: str = "Monday-Friday, 9AM-5PM EST"
     VECTORSTORE_PATH: str = "data/vectorstore.faiss"
     KNOWLEDGE_BASE_PDF: str = "data/Vehicle_Breakdown_Queries.pdf"
     VECTOR_CACHE_DIR: str = ".vector_cache"

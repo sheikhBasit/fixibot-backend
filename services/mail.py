@@ -42,7 +42,7 @@ async def send_help_support_email(
     user_name: str, 
     subject: str, 
     message_content: str,
-    support_email: str = "support@yourcompany.com"  # Default support email
+    support_email: str = settings.SUPPORT_EMAIL  # Default support email
 ):
     """
     Send a help and support email from user to support team
