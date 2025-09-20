@@ -183,30 +183,10 @@ class MechanicBase(BaseModel):
             examples=["123 Main Street, Gulberg"]
         )
     ]
-    latitude: Annotated[
-        float,
-        Field(
-            ...,
-            ge=-90,
-            le=90,
-            description="Geographic latitude of workshop",
-            examples=[31.5204]
-        )
-    ]
-    longitude: Annotated[
-        float,
-        Field(
-            ...,
-            ge=-180,
-            le=180,
-            description="Geographic longitude of workshop",
-            examples=[74.3587]
-        )
-    ]
     location: Annotated[
-        Optional[dict],
+        dict,
         Field(
-            None,
+            ...,
             description="GeoJSON location point for spatial queries",
             examples=[{"type": "Point", "coordinates": [74.3587, 31.5204]}]
         )
@@ -673,6 +653,22 @@ class MechanicOut(MechanicRegistration):
     def full_name(self) -> str:
         """Combine first and last name."""
         return f"{self.first_name} {self.last_name}"
+
+    @computed_field
+    @property
+    def latitude(self) -> Optional[float]:
+        """Extracts latitude from the GeoJSON location."""
+        if self.location and self.location.get("coordinates"):
+            return self.location["coordinates"][1] # Latitude is the second element
+        return None
+
+    @computed_field
+    @property
+    def longitude(self) -> Optional[float]:
+        """Extracts longitude from the GeoJSON location."""
+        if self.location and self.location.get("coordinates"):
+            return self.location["coordinates"][0] # Longitude is the first element
+        return None
 
     @computed_field
     @property

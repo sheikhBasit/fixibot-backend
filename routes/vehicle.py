@@ -11,7 +11,7 @@ from utils.time import utc_now
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
-@router.post("/", response_model=VehicleOut, summary="Register a new vehicle with images")
+@router.post("/create", response_model=VehicleOut, summary="Register a new vehicle with images")
 async def create_vehicle(
     user_id: str = Form(...),
     model: str = Form(...),
@@ -61,7 +61,7 @@ async def create_vehicle(
     return await VehicleService.create_vehicle(vehicle_data)
 
 
-@router.get("/", response_model=List[VehicleOut], summary="Get all user registered vehicles")
+@router.get("/all", response_model=List[VehicleOut], summary="Get all user registered vehicles")
 async def get_user_vehicles(current_user: UserInDB = Depends(get_current_user)):
     # Create a basic search query for the user's vehicles
     search_query = VehicleSearch(user_id=current_user.id)

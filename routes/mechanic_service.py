@@ -16,7 +16,7 @@ from utils.user import get_current_user
 router = APIRouter(prefix="/mechanic-services", tags=["Mechanic Services"])
 
 
-@router.post("/", response_model=MechanicServiceOut, summary="Request a new mechanic service")
+@router.post("/post", response_model=MechanicServiceOut, summary="Request a new mechanic service")
 async def create_mechanic_service(
     service: MechanicServiceIn,
     current_user: UserInDB = Depends(get_current_user)

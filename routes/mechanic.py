@@ -206,6 +206,9 @@ async def update_mechanic_profile(
     
     return await MechanicService.update_mechanic(str(current_user.id), update_data)
 
+
+# Assuming your other imports and models are defined
+
 @router.patch("/{mechanic_id}", response_model=MechanicOut)
 async def update_mechanic_admin(
     mechanic_id: str,
@@ -234,81 +237,86 @@ async def update_mechanic_admin(
     """Update any mechanic's profile (admin only, partial update)."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
-    
-    # Validate time format if provided
-    if start_time or end_time:
-        time_pattern = r"^\d{2}:\d{2}$"
-        if start_time and not re.match(time_pattern, start_time):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_time must be in HH:MM format (e.g., '09:00')"
-            )
-        if end_time and not re.match(time_pattern, end_time):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="end_time must be in HH:MM format (e.g., '18:00')"
-            )
-    
+
+    # Helper function to clean form values
+    def clean_form_value(value):
+        """Converts common 'empty' values to None."""
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        if isinstance(value, list) and not value:
+            return None
+        return value
+
+    # Process all incoming form fields to handle empty strings
+    cleaned_data = {
+        "first_name": clean_form_value(first_name),
+        "last_name": clean_form_value(last_name),
+        "email": clean_form_value(email),
+        "phone_number": clean_form_value(phone_number),
+        "province": clean_form_value(province),
+        "city": clean_form_value(city),
+        "address": clean_form_value(address),
+        "latitude": latitude,  # No need to clean floats
+        "longitude": longitude, # No need to clean floats
+        "expertise": clean_form_value(expertise),
+        "years_of_experience": clean_form_value(years_of_experience),
+        "workshop_name": clean_form_value(workshop_name),
+        "is_verified": is_verified,
+        "is_available": is_available,
+        "working_days": clean_form_value(working_days),
+        "start_time": clean_form_value(start_time),
+        "end_time": clean_form_value(end_time),
+        "profile_picture": profile_picture,
+        "cnic_front": cnic_front,
+        "cnic_back": cnic_back
+    }
     
     # Handle file uploads if present
-    profile_pic_url = None
-    if profile_picture:
-        profile_pic_url = await upload_image(profile_picture, expected_type='user')
+    # Check if value is a file, or a URL string from a previous update
+    profile_pic_url = cleaned_data["profile_picture"]
+    if isinstance(profile_pic_url, UploadFile):
+        profile_pic_url = await upload_image(profile_pic_url, expected_type='user')
     
-    cnic_front_url = None
-    if cnic_front:
-        cnic_front_url = await upload_image(cnic_front, expected_type='cnic')
+    cnic_front_url = cleaned_data["cnic_front"]
+    if isinstance(cnic_front_url, UploadFile):
+        cnic_front_url = await upload_image(cnic_front_url, expected_type='cnic')
     
-    cnic_back_url = None
-    if cnic_back:
-        cnic_back_url = await upload_image(cnic_back, expected_type='cnic')
+    cnic_back_url = cleaned_data["cnic_back"]
+    if isinstance(cnic_back_url, UploadFile):
+        cnic_back_url = await upload_image(cnic_back_url, expected_type='cnic')
     
-    # Handle working hours if provided
+    # --- Corrected Working Hours and Days Handling ---
+    # The cleaned_data dictionary now has None for missing values
     working_hours = None
-    if start_time and end_time:
+    if cleaned_data["start_time"] is not None and cleaned_data["end_time"] is not None:
         try:
-            # WorkingHours now expects strings, not time objects
-            working_hours = WorkingHours(start_time=start_time, end_time=end_time)
+            working_hours = WorkingHours(
+                start_time=cleaned_data["start_time"],
+                end_time=cleaned_data["end_time"]
+            )
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid working hours: {str(e)}"
+                detail=f"Invalid working hours format: {str(e)}"
             )
-    
-    # Convert empty strings to None to preserve existing values
-    def clean_form_value(value, value_type=None):
-        """
-        Clean incoming form value.
-        - Converts empty strings or 'null'/'undefined' to None
-        - Optionally casts to specified type if value is valid
-        """
-        if value in ["", "null", "undefined", None]:
-            return None
-        if value_type:
-            try:
-                return value_type(value)
-            except (ValueError, TypeError):
-                return None
-        return value
 
-    
-    # Create update data model - convert empty strings to None
+    # Create update data model with cleaned values
     update_data = MechanicUpdate(
-        first_name=clean_form_value(first_name),
-        last_name=clean_form_value(last_name),
-        email=clean_form_value(email.lower() if email else None),
-        phone_number=clean_form_value(phone_number),
-        province=clean_form_value(province.lower() if province else None),
-        city=clean_form_value(city.lower() if city else None),
-        address=clean_form_value(address),
-        latitude=latitude,
-        longitude=longitude,
-        expertise=expertise,
-        years_of_experience=clean_form_value(years_of_experience, int), 
-        workshop_name=clean_form_value(workshop_name.lower() if workshop_name else None),
-        is_verified=is_verified,
-        is_available=is_available,
-        working_days=working_days,
+        first_name=cleaned_data["first_name"],
+        last_name=cleaned_data["last_name"],
+        email=cleaned_data["email"].lower() if cleaned_data["email"] else None,
+        phone_number=cleaned_data["phone_number"],
+        province=cleaned_data["province"],
+        city=cleaned_data["city"],
+        address=cleaned_data["address"],
+        latitude=cleaned_data["latitude"],
+        longitude=cleaned_data["longitude"],
+        expertise=cleaned_data["expertise"],
+        years_of_experience=cleaned_data["years_of_experience"],
+        workshop_name=cleaned_data["workshop_name"],
+        is_verified=cleaned_data["is_verified"],
+        is_available=cleaned_data["is_available"],
+        working_days=cleaned_data["working_days"],
         working_hours=working_hours,
         profile_picture=profile_pic_url,
         cnic_front=cnic_front_url,

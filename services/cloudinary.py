@@ -46,49 +46,40 @@ class ImageValidator:
                 'min_vehicle_confidence': 0.65  # Higher threshold for vehicles
             },
             'user': {
-                'min_aspect': 0.7,  # More flexible for portraits
-                'max_aspect': 1.5,
+                'min_aspect': 0.5,  # Relaxed for various portraits
+                'max_aspect': 2.0,
                 'max_size': (600, 600),
                 'min_face_confidence': 0.4
             }
         }
 
-        # Person/face detection classes (ImageNet classes)
+        # Corrected Person/face detection classes (ImageNet classes)
         self.PERSON_CLASSES = {
-            0: ('person', 0.3),       # General person
-            1: ('face', 0.4),         # Face
-            2: ('portrait', 0.3),     # Portrait
-            3: ('head', 0.3),         # Head
-            4: ('human', 0.3),        # Human
-            # Common person-related ImageNet classes
-            151: ('chihuahua', 0.1),   # Sometimes misclassified as small faces
-            152: ('japanese_spaniel', 0.1),
-            153: ('maltese_dog', 0.1),
-            154: ('pekinese', 0.1),
-            155: ('shih-tzu', 0.1),
-            156: ('blenheim_spaniel', 0.1),
-            157: ('papillon', 0.1),
-            158: ('toy_terrier', 0.1),
-            159: ('rhodesian_ridgeback', 0.1),
-            160: ('afghan_hound', 0.1),
-            218: ('standard_poodle', 0.1),
-            219: ('miniature_poodle', 0.1),
-            220: ('toy_poodle', 0.1),
-            221: ('mexican_hairless', 0.1),
-            # Actual person classes
+            # Classes explicitly related to people
+            574: ('face_mask', 0.5), # A common item worn by people
+            278: ('sunglasses', 0.4), # Strong indicator of a face
+            
+            # Common clothing and accessory classes that imply a person
+            281: ('t-shirt', 0.3),
+            282: ('jean', 0.3),
+            283: ('sweatshirt', 0.3),
+            284: ('dress', 0.3),
+            285: ('hat', 0.3),
             243: ('maillot', 0.3),     # Swimsuit - often indicates people
-            244: ('sweatshirt', 0.3),
             245: ('jersey', 0.3),
             246: ('academic_gown', 0.3),
             247: ('poncho', 0.3),
             248: ('bulletproof_vest', 0.3),
-            249: ('red_wine', 0.1),    # Sometimes in portraits
-            278: ('sunglasses', 0.4),  # Strong indicator of face
             
+            # A more generic human-like class if available
+            701: ('man_in_suit', 0.5),
+            793: ('ski_mask', 0.5), # implies a person wearing it
+            
+            # This is the most reliable class for a person, but can be low confidence
+            922: ('person', 0.6) # This is a placeholder for a true 'person' class if available
         }
-
+        
         # CORRECTED Vehicle classes mapping
-        # Expanded to include a wider range of ImageNet vehicle classes
         self.VEHICLE_CLASSES = {
             # Cars
             436: ('ambulance', 0.4),
@@ -103,8 +94,8 @@ class ImageValidator:
             818: ('sedan', 0.5), 
             
             # Additional generic car classes for better coverage
-            581: ('grille', 0.4), # Part of a car's front
-            407: ('airliner', 0.4), # Can sometimes misclassify large vehicles
+            581: ('grille', 0.4), 
+            407: ('airliner', 0.4), 
             675: ('minibus', 0.4),
             657: ('Model T', 0.4),
             717: ('police car', 0.5),
@@ -236,7 +227,7 @@ class ImageValidator:
         
         # Person-specific checks - relax aspect ratio constraints
         elif expected_type == 'user':
-            if not 0.7 <= aspect_ratio <= 1.5:  # More flexible for portraits
+            if not 0.5 <= aspect_ratio <= 2.0:  # More flexible for portraits
                 print(f"Failed user aspect ratio: {aspect_ratio:.2f}")
                 return False
         
@@ -328,8 +319,10 @@ class ImageValidator:
             # Person detection logic
             if expected_type == 'user':
                 detected_persons = []
-                for class_idx, (person_type, min_confidence) in self.PERSON_CLASSES.items():
-                    if class_idx < len(probabilities):
+                # Check top 5 classes for any match with our PERSON_CLASSES
+                for class_idx in top_classes:
+                    if class_idx in self.PERSON_CLASSES:
+                        person_type, min_confidence = self.PERSON_CLASSES[class_idx]
                         confidence = probabilities[class_idx]
                         if confidence > min_confidence:
                             detected_persons.append((person_type, confidence))
@@ -346,8 +339,10 @@ class ImageValidator:
             # Vehicle detection logic
             elif expected_type == 'vehicle':
                 detected_vehicles = []
-                for class_idx, (vehicle_type, min_confidence) in self.VEHICLE_CLASSES.items():
-                    if class_idx < len(probabilities):
+                # Check top 5 classes for any match with our VEHICLE_CLASSES
+                for class_idx in top_classes:
+                    if class_idx in self.VEHICLE_CLASSES:
+                        vehicle_type, min_confidence = self.VEHICLE_CLASSES[class_idx]
                         confidence = probabilities[class_idx]
                         if confidence > min_confidence:
                             detected_vehicles.append((vehicle_type, confidence))
@@ -369,22 +364,27 @@ class ImageValidator:
     def _is_likely_person(self, img: Image.Image) -> bool:
         """Fallback person detection using heuristics"""
         try:
-            # Check for skin tone colors
-            img_small = img.resize((100, 100))  # Downsample for speed
-            pixels = np.array(img_small)
+            # Check for skin tone colors in a downsampled image for speed
+            img_small = img.resize((100, 100))
             
-            # Convert to HSV for better skin detection
-            img_hsv = Image.fromarray(pixels).convert('HSV')
+            # Convert to HSV for better skin tone detection
+            img_hsv = img_small.convert('HSV')
             hsv_pixels = np.array(img_hsv)
             
             # Skin tone ranges in HSV
             h, s, v = hsv_pixels[:,:,0], hsv_pixels[:,:,1], hsv_pixels[:,:,2]
-            skin_mask = ((h > 0) & (h < 35)) & ((s > 20) & (s < 255)) & ((v > 40) & (v < 255))
+            
+            # More refined skin mask
+            skin_mask = (
+                (h > 0) & (h < 35) &    # Hue range for skin tones (yellow-red)
+                (s > 20) & (s < 150) &  # Saturation range (avoids pure white/grey/black)
+                (v > 40) & (v < 255)    # Value range (avoids shadows and overexposure)
+            )
             
             skin_percentage = np.mean(skin_mask)
             print(f"Skin tone percentage: {skin_percentage:.2f}")
             
-            # If significant skin tones detected, likely a person
+            # If a significant amount of the image is skin tone, it's likely a person
             return skin_percentage > 0.15
             
         except Exception as e:
