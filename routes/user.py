@@ -304,7 +304,7 @@ async def delete_user_admin(user_id: str, current_user: UserInDB = Depends(get_c
         raise HTTPException(status_code=404, detail="User not found or could not be deleted")
     return {"message": "User deleted successfully"}
 
-@router.put("/admin/users/{user_id}", response_model=UserOut, summary="Admin: Update any user")
+@router.patch("/admin/users/{user_id}", response_model=UserOut, summary="Admin: Update any user")
 async def update_user_admin(
     user_id: str,
     first_name: Optional[str] = Form(None),
@@ -320,6 +320,19 @@ async def update_user_admin(
     """
     Update any user's profile (admin only).
     """
+    # Debug: Print all incoming form data
+    print(f"=== DEBUG: Incoming Request Data ===")
+    print(f"user_id: {user_id}")
+    print(f"first_name: {first_name} (type: {type(first_name)})")
+    print(f"last_name: {last_name} (type: {type(last_name)})")
+    print(f"email: {email} (type: {type(email)})")
+    print(f"phone_number: {phone_number} (type: {type(phone_number)})")
+    print(f"profile_picture: {profile_picture} (type: {type(profile_picture)})")
+    print(f"role: {role} (type: {type(role)})")
+    print(f"is_verified: {is_verified} (type: {type(is_verified)})")
+    print(f"is_active: {is_active} (type: {type(is_active)})")
+    print(f"current_user role: {current_user.role}")
+    
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -340,20 +353,41 @@ async def update_user_admin(
     cleaned_email = clean_form_value(email)
     cleaned_phone_number = clean_form_value(phone_number)
     
+    print(f"=== DEBUG: After Cleaning ===")
+    print(f"cleaned_first_name: {cleaned_first_name}")
+    print(f"cleaned_last_name: {cleaned_last_name}")
+    print(f"cleaned_email: {cleaned_email}")
+    print(f"cleaned_phone_number: {cleaned_phone_number}")
+    
     # Validate input using UpdateUser model
-    update_data = UpdateUser(
-        first_name=cleaned_first_name,
-        last_name=cleaned_last_name,
-        email=cleaned_email,
-        phone_number=cleaned_phone_number,
-        profile_picture=None  # Will handle file separately
-    )
+    try:
+        update_data = UpdateUser(
+            first_name=cleaned_first_name,
+            last_name=cleaned_last_name,
+            email=cleaned_email,
+            phone_number=cleaned_phone_number,
+            profile_picture=None  # Will handle file separately
+        )
+        print(f"=== DEBUG: UpdateUser Model Created Successfully ===")
+        print(f"update_data: {update_data}")
+    except Exception as e:
+        print(f"=== DEBUG: Error creating UpdateUser model ===")
+        print(f"Error: {e}")
+        print(f"Error type: {type(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid input data: {str(e)}"
+        )
     
     update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
+    print(f"=== DEBUG: After model_dump ===")
+    print(f"update_dict: {update_dict}")
     
     # Handle email normalization
     if "email" in update_dict:
         update_dict["email"] = update_dict["email"].lower()
+        print(f"=== DEBUG: After email normalization ===")
+        print(f"normalized email: {update_dict['email']}")
         
         # Check if email is already in use by another user
         existing_email_user = await db.users_collection.find_one({
@@ -361,6 +395,8 @@ async def update_user_admin(
             "_id": {"$ne": PyObjectId(user_id)}
         })
         if existing_email_user:
+            print(f"=== DEBUG: Email conflict detected ===")
+            print(f"existing_email_user: {existing_email_user}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email address already in use by another account"
@@ -373,6 +409,8 @@ async def update_user_admin(
             "_id": {"$ne": PyObjectId(user_id)}
         })
         if existing_phone_user:
+            print(f"=== DEBUG: Phone number conflict detected ===")
+            print(f"existing_phone_user: {existing_phone_user}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Phone number already in use by another account"
@@ -380,8 +418,11 @@ async def update_user_admin(
 
     # Handle profile picture upload
     if profile_picture:
+        print(f"=== DEBUG: Processing profile picture ===")
+        print(f"profile_picture type: {type(profile_picture)}")
         image_url = await upload_image(profile_picture, expected_type='user')
         update_dict["profile_picture"] = image_url
+        print(f"uploaded image_url: {image_url}")
 
     # Add admin-only fields
     if role is not None:
@@ -394,17 +435,32 @@ async def update_user_admin(
     # Add updated_at timestamp
     update_dict["updated_at"] = datetime.now(timezone.utc)
 
+    print(f"=== DEBUG: Final update_dict ===")
+    print(f"update_dict: {update_dict}")
+
     # Update user in database
-    updated_user = await UserService.update_user(user_id, update_dict)
+    try:
+        updated_user = await UserService.update_user(user_id, update_dict)
+        print(f"=== DEBUG: After UserService.update_user ===")
+        print(f"updated_user: {updated_user}")
+    except Exception as e:
+        print(f"=== DEBUG: Error in UserService.update_user ===")
+        print(f"Error: {e}")
+        print(f"Error type: {type(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user in database"
+        )
     
     if not updated_user:
+        print(f"=== DEBUG: User not found ===")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
         
+    print(f"=== DEBUG: Successfully updated user ===")
     return updated_user
-
 @router.put("/users/me", response_model=UserOut)
 async def update_user_me(
     first_name: Optional[str] = Form(None),

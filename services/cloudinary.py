@@ -87,32 +87,42 @@ class ImageValidator:
             
         }
 
-        # Vehicle classes mapping
+        # CORRECTED Vehicle classes mapping
+        # Expanded to include a wider range of ImageNet vehicle classes
         self.VEHICLE_CLASSES = {
             # Cars
-            656: ('car', 0.4),   # Model T
-            817: ('car', 0.5),   # Sports car
-            511: ('car', 0.4),   # Convertible
-            705: ('car', 0.4),   # Passenger car
-            627: ('car', 0.5),   # Limousine
-            436: ('car', 0.3),   # Ambulance
+            436: ('ambulance', 0.4),
+            479: ('cabriolet', 0.6), 
+            511: ('convertible', 0.4),
+            609: ('hatchback', 0.5), 
+            627: ('limousine', 0.5),
+            656: ('Model T', 0.4),
+            705: ('passenger car', 0.4),
+            751: ('racer', 0.5),
+            817: ('sports car', 0.5),
+            818: ('sedan', 0.5), 
+            
+            # Additional generic car classes for better coverage
+            581: ('grille', 0.4), # Part of a car's front
+            407: ('airliner', 0.4), # Can sometimes misclassify large vehicles
+            675: ('minibus', 0.4),
+            657: ('Model T', 0.4),
+            717: ('police car', 0.5),
             
             # Bikes
-            444: ('bike', 0.6),  # Bicycle
-            557: ('bike', 0.7),  # Motorcycle
+            444: ('bicycle', 0.6),
+            557: ('motorcycle', 0.7),
             
-            # Trucks
-            864: ('truck', 0.5), # Tow truck
-            569: ('truck', 0.4), # Dump truck
-            573: ('truck', 0.4), # Pickup truck
-            
-            # Vans/SUVs
-            654: ('van', 0.4),   # Minivan
-            757: ('suv', 0.4),   # RV
+            # Trucks and vans
+            569: ('dump truck', 0.4),
+            573: ('pickup truck', 0.4),
+            654: ('minivan', 0.4),
+            786: ('snowplow', 0.4),
+            864: ('tow truck', 0.5),
             
             # Buses
-            779: ('bus', 0.5),   # School bus
-            450: ('bus', 0.5)    # Regular bus
+            779: ('school bus', 0.5),
+            450: ('bus', 0.5)
         }
 
         # Defer ONNX model initialization

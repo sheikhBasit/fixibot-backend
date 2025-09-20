@@ -25,9 +25,6 @@ async def delete_mechanic_admin(mechanic_id: str, current_user: UserInDB = Depen
         raise HTTPException(status_code=404, detail="Mechanic not found or could not be deleted")
     return {"message": "Mechanic deleted successfully"}
 
-router = APIRouter(prefix="/mechanics", tags=["Mechanics"])
-logger = logging.getLogger(__name__)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 @router.post("/register", response_model=MechanicOut, status_code=status.HTTP_201_CREATED)
 async def register_mechanic(
@@ -99,7 +96,7 @@ async def register_mechanic(
         logger.error(f"Error registering mechanic: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Error registering mechanic"
+            detail=f"Error registering mechanic {e}"
         )
 
 @router.patch("/me", response_model=MechanicOut)
