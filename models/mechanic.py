@@ -183,12 +183,34 @@ class MechanicBase(BaseModel):
             examples=["123 Main Street, Gulberg"]
         )
     ]
+    # Make location optional in the base class
     location: Annotated[
-        dict,
+        Optional[dict],
         Field(
-            ...,
+            None,
             description="GeoJSON location point for spatial queries",
             examples=[{"type": "Point", "coordinates": [74.3587, 31.5204]}]
+        )
+    ]
+    # Add latitude and longitude as required fields
+    latitude: Annotated[
+        float,
+        Field(
+            ...,
+            ge=-90,
+            le=90,
+            description="Latitude coordinate",
+            examples=[31.5204]
+        )
+    ]
+    longitude: Annotated[
+        float,
+        Field(
+            ...,
+            ge=-180,
+            le=180,
+            description="Longitude coordinate",
+            examples=[74.3587]
         )
     ]
     years_of_experience: Annotated[
@@ -216,15 +238,17 @@ class MechanicBase(BaseModel):
             description="Daily working hours"
         )
     ]
+
     @model_validator(mode='after')
     def validate_location_data(self) -> 'MechanicBase':
         """Generate GeoJSON location from latitude/longitude."""
-        if self.latitude is not None and self.longitude is not None:
-            self.location = {
-                "type": "Point",
-                "coordinates": [self.longitude, self.latitude]  # GeoJSON: [long, lat]
-            }
+        # Always create location from latitude and longitude
+        self.location = {
+            "type": "Point",
+            "coordinates": [self.longitude, self.latitude]  # GeoJSON: [long, lat]
+        }
         return self
+
     @field_validator("email", "province", "city", "address", mode="before")
     @classmethod
     def normalize_text_fields(cls, v: Optional[str]) -> Optional[str]:
@@ -304,13 +328,6 @@ class MechanicRegistration(MechanicBase):
         """Normalize workshop name."""
         return v.lower() if v else v
 
-    # @model_validator(mode='after')
-    # def validate_verification_requirements(self) -> 'MechanicRegistration':
-    #     """Ensure verification documents are provided."""
-    #     if not self.is_verified and (not self.cnic_front or not self.cnic_back):
-    #         raise ValueError("CNIC images are required for verification")
-    #     return self
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -334,6 +351,101 @@ class MechanicRegistration(MechanicBase):
                 "is_available": True,
                 "working_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
                 "working_hours": {"start_time": "09:00", "end_time": "18:00"}
+            }
+        }
+    )
+
+
+class MechanicOut(MechanicRegistration):
+    """Output model for mechanics with additional computed fields."""
+    id: Annotated[
+        PyObjectId,
+        Field(
+            ...,
+            alias="_id",
+            description="Unique mechanic identifier",
+            examples=["507f1f77bcf86cd799439011"]
+        )
+    ]
+    average_rating: Annotated[
+        Optional[float],
+        Field(
+            None,
+            ge=0,
+            le=5,
+            description="Average rating from feedbacks",
+            examples=[4.5]
+        )
+    ]
+    total_feedbacks: Annotated[
+        int,
+        Field(
+            0,
+            ge=0,
+            description="Total number of feedbacks received",
+            examples=[15]
+        )
+    ]
+    created_at: Annotated[
+        Optional[datetime],
+        Field(
+            ...,
+            description="Timestamp when mechanic was registered",
+            examples=["2023-01-01T00:00:00Z"]
+        )
+    ]
+    updated_at: Annotated[
+        Optional[datetime],
+        Field(
+            None,
+            description="Timestamp when mechanic was last updated",
+            examples=["2023-01-02T00:00:00Z"]
+        )
+    ]
+
+    @computed_field
+    @property
+    def full_name(self) -> str:
+        """Combine first and last name."""
+        return f"{self.first_name} {self.last_name}"
+
+    # NOTE: latitude and longitude are already defined as regular fields in MechanicBase
+    # so we don't need to define them as computed fields here
+
+    @computed_field
+    @property
+    def premium_services(self) -> List[ExpertiseEnum]:
+        """List of premium services offered by this mechanic."""
+        return [e for e in self.expertise if e in ExpertiseEnum.premium_services()]
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={ObjectId: str},
+        json_schema_extra={
+            "example": {
+                "_id": "507f1f77bcf86cd799439011",
+                "first_name": "Ahmed",
+                "last_name": "Ali",
+                "cnic": "35202-1234567-1",
+                "phone_number": "+923001234567",
+                "email": "ahmed@example.com",
+                "expertise": ["engine", "electrical"],
+                "province": "Punjab",
+                "city": "Lahore",
+                "address": "Street 123, Model Town",
+                "latitude": 31.5204,
+                "longitude": 74.3587,
+                "profile_picture": "https://example.com/profile.jpg",
+                "workshop_name": "ali auto repair",
+                "years_of_experience": 5,
+                "is_verified": True,
+                "is_available": True,
+                "working_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "working_hours": {"start_time": "09:00", "end_time": "18:00"},
+                "average_rating": 4.5,
+                "total_feedbacks": 15,
+                "created_at": "2023-01-01T00:00:00Z",
+                "full_name": "Ahmed Ali"
             }
         }
     )
@@ -584,127 +696,3 @@ class MechanicUpdate(BaseModel):
     model_config = ConfigDict(
         extra='forbid'
     )
-    # @model_validator(mode='after')
-    # def validate_update(self) -> 'MechanicUpdate':
-    #     """Ensure verification requirements are met."""
-    #     # Only validate if is_verified is explicitly set to True
-    #     if hasattr(self, 'is_verified') and self.is_verified is True:
-    #         # Check if CNIC images are provided (either in update or already exist)
-    #         has_cnic_front = hasattr(self, 'cnic_front') and self.cnic_front is not None
-    #         has_cnic_back = hasattr(self, 'cnic_back') and self.cnic_back is not None
-            
-    #         if not (has_cnic_front or has_cnic_back):
-    #             # We can't check existing CNIC images here, so we'll check in the service
-    #             # Just note that validation might fail later if images don't exist
-    #             pass
-        
-    #     return self
-
-
-class MechanicOut(MechanicRegistration):
-    """Output model for mechanics with additional computed fields."""
-    id: Annotated[
-        PyObjectId,
-        Field(
-            ...,
-            alias="_id",
-            description="Unique mechanic identifier",
-            examples=["507f1f77bcf86cd799439011"]
-        )
-    ]
-    average_rating: Annotated[
-        Optional[float],
-        Field(
-            None,
-            ge=0,
-            le=5,
-            description="Average rating from feedbacks",
-            examples=[4.5]
-        )
-    ]
-    total_feedbacks: Annotated[
-        int,
-        Field(
-            0,
-            ge=0,
-            description="Total number of feedbacks received",
-            examples=[15]
-        )
-    ]
-    created_at: Annotated[
-        Optional[datetime],
-        Field(
-            ...,
-            description="Timestamp when mechanic was registered",
-            examples=["2023-01-01T00:00:00Z"]
-        )
-    ]
-    updated_at: Annotated[
-        Optional[datetime],
-        Field(
-            None,
-            description="Timestamp when mechanic was last updated",
-            examples=["2023-01-02T00:00:00Z"]
-        )
-    ]
-
-    @computed_field
-    @property
-    def full_name(self) -> str:
-        """Combine first and last name."""
-        return f"{self.first_name} {self.last_name}"
-
-    @computed_field
-    @property
-    def latitude(self) -> Optional[float]:
-        """Extracts latitude from the GeoJSON location."""
-        if self.location and self.location.get("coordinates"):
-            return self.location["coordinates"][1] # Latitude is the second element
-        return None
-
-    @computed_field
-    @property
-    def longitude(self) -> Optional[float]:
-        """Extracts longitude from the GeoJSON location."""
-        if self.location and self.location.get("coordinates"):
-            return self.location["coordinates"][0] # Longitude is the first element
-        return None
-
-    @computed_field
-    @property
-    def premium_services(self) -> List[ExpertiseEnum]:
-        """List of premium services offered by this mechanic."""
-        return [e for e in self.expertise if e in ExpertiseEnum.premium_services()]
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_encoders={ObjectId: str},
-        json_schema_extra={
-            "example": {
-                "_id": "507f1f77bcf86cd799439011",
-                "first_name": "Ahmed",
-                "last_name": "Ali",
-                "cnic": "35202-1234567-1",
-                "phone_number": "+923001234567",
-                "email": "ahmed@example.com",
-                "expertise": ["engine", "electrical"],
-                "province": "Punjab",
-                "city": "Lahore",
-                "address": "Street 123, Model Town",
-                "latitude": 31.5204,
-                "longitude": 74.3587,
-                "profile_picture": "https://example.com/profile.jpg",
-                "workshop_name": "ali auto repair",
-                "years_of_experience": 5,
-                "is_verified": True,
-                "is_available": True,
-                "working_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
-                "working_hours": {"start_time": "09:00", "end_time": "18:00"},
-                "average_rating": 4.5,
-                "total_feedbacks": 15,
-                "created_at": "2023-01-01T00:00:00Z",
-                "full_name": "Ahmed Ali"
-            }
-        }
-    )
-

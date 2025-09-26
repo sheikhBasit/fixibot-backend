@@ -112,9 +112,9 @@ class ChatService:
                 )
 
                 enhanced_question = (
-                    f"Conversation Context:\n{history_context}\n\n"
-                    f"Vehicle: {vehicle.get('brand', 'Unknown')} {vehicle.get('model', 'Unknown')} {vehicle.get('year', 'Unknown')}\n"
-                    f"Current Problem: {prompt}"
+                 f"Conversation Context:\n{history_context}\n\n"
+                    f"User Query for a specific vehicle: {vehicle.get('brand', 'Unknown')} {vehicle.get('model', 'Unknown')} {vehicle.get('fuel_type', 'Unknown')}"
+                    f"({vehicle.get('transmission', 'Unknown')} {vehicle.get('year', 'Unknown')}) - {prompt}"
                 )
 
                 # Manual embedding and search
@@ -170,9 +170,30 @@ class ChatService:
                         chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append(msg)
-                
+                enhanced_system_prompt = f"""You are a specialized vehicle diagnostic assistant for a **{vehicle_info['year']} {vehicle_info['make']} {vehicle_info['model']}**.
+                Your goal is to provide **highly specific, actionable advice** for the user's vehicle problem.
+                Use the provided context and your expert knowledge to diagnose the issue and propose a solution.
+
+                - **Vehicle Details**:
+                    - Make: {vehicle_info['make']}
+                    - Model: {vehicle_info['model']}
+                    - Year: {vehicle_info['year']}
+                    - Fuel Type: {vehicle_info['fuel_type']}
+                    - Engine Type: {vehicle_info['engine_type']}
+
+                - **User Problem**: {inputs['prompt']}
+
+                - **Instructions**:
+                1. Start by acknowledging the user's vehicle and problem.
+                2. **Directly apply** any relevant information from the 'Knowledge Base Context' and 'Image Analysis' to your diagnosis.
+                3. Provide a step-by-step diagnostic process tailored to the specific vehicle model.
+                4. If the provided context is insufficient for a specific answer, explain what additional information is needed (e.g., "Can you provide a picture of the engine bay?").
+                5. Avoid general answers unless no specific information is available.
+                """
+
                 llm_input = {
-                    "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
+                    # "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
+                    "system_prompt": enhanced_system_prompt,
                     "input": inputs["prompt"],
                     "context": f"""
                     Image Analysis:
