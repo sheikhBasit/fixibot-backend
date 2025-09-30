@@ -13,7 +13,7 @@ from utils.auth import get_password_hash, verify_password
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException, status
 from utils.auth import generate_otp
-        
+   
 logger = logging.getLogger("user_service")
 
 class UserService:
@@ -174,6 +174,7 @@ class UserService:
             )
         
 
+
     @staticmethod
     async def verify_email_token(email: str, token: str) -> bool:
         """Verify email verification token."""
@@ -182,21 +183,30 @@ class UserService:
             if not user:
                 return False
                 
+            current_time = datetime.now(timezone.utc)
+            
+            # Ensure the expiry time is timezone-aware
+            if user.verify_token_expiry:
+                # If it's naive, assume it's UTC and make it aware
+                if user.verify_token_expiry.tzinfo is None:
+                    user.verify_token_expiry = user.verify_token_expiry.replace(tzinfo=timezone.utc)
+            
+            print(user.verify_token, token, user.verify_token_expiry, user.id, current_time)    
+            
             if (user.verify_token == token and 
                 user.verify_token_expiry and 
-                user.verify_token_expiry > datetime.now(timezone.utc)):
+                user.verify_token_expiry > current_time):
+                
                 await db.users_collection.update_one(
-                    {"_id": PyObjectId(user.id)},  # Fix here
+                    {"_id": PyObjectId(user.id)},  # Use ObjectId instead of PyObjectId
                     {"$set": {"is_verified": True},
-                        "$unset": {"verify_token": "", "verify_token_expiry": ""}}
+                    "$unset": {"verify_token": "", "verify_token_expiry": ""}}
                 )
                 return True
             return False
         except Exception as e:
             logger.error(f"Error verifying email token: {e}")
-            return False
-
-    
+            return False    
 
     @staticmethod
     async def reset_password(email: str, token: str, new_password: str) -> bool:
@@ -243,7 +253,7 @@ class UserService:
         """Generate and save a token (verification or password reset)."""
         
         token = generate_otp(6)
-        expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=20)
         
         update_field = {
             "verify_token": token,

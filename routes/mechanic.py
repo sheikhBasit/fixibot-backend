@@ -9,6 +9,7 @@ from models.user import UserInDB
 from services.mechanics import MechanicService
 from services.cloudinary import upload_image
 from utils.user import get_current_user
+from pydantic import conint
 import logging
 
 router = APIRouter(prefix="/mechanics", tags=["Mechanics"])
@@ -349,19 +350,19 @@ async def list_mechanics(
         available=available,
         city=city.lower() if city else None
     )
-
 @router.get("/search/nearby", response_model=List[MechanicOut])
 async def search_nearby_mechanics(
-    city: str,
+    # 💡 MODIFIED: Make city optional in the endpoint
+    city: Optional[str] = Query(None, description="City to search in (optional)"),
     expertise: Optional[str] = Query(None, description="Comma-separated list of expertise"),
-    min_experience: int = 0,
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
-    max_distance_km: float = 10,
+    min_experience: conint(ge=0, le=50) = 0,
+    latitude: Optional[float] = Query(None, description="Latitude for proximity search"),
+    longitude: Optional[float] = Query(None, description="Longitude for proximity search"),
+    max_distance_km: float = Query(10, gt=0, le=100),
     current_user: UserInDB = Depends(get_current_user)
 ):
     """Search mechanics by location and expertise."""
-    # Convert comma-separated expertise string to list
+    
     expertise_list = None
     if expertise:
         try:
@@ -373,14 +374,14 @@ async def search_nearby_mechanics(
             )
     
     return await MechanicService.search_mechanics(
-        city=city.lower(),
+        # Pass the city directly (it's Optional[str])
+        city=city, 
         expertise=expertise_list,
         min_experience=min_experience,
         latitude=latitude,
         longitude=longitude,
         max_distance_km=max_distance_km
     )
-
 @router.post("/{mechanic_id}/verify", status_code=status.HTTP_204_NO_CONTENT)
 async def verify_mechanic(
     mechanic_id: str,

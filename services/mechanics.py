@@ -6,7 +6,7 @@ import pymongo
 from models.mechanic import ExpertiseEnum, MechanicIn, MechanicOut, MechanicUpdate, WorkingHours
 from database import db
 from utils.py_object import PyObjectId
-
+import json
 from fastapi import HTTPException, status
 import logging
 from typing import Optional, List
@@ -291,31 +291,45 @@ class MechanicService:
                 detail="Error retrieving mechanics"
             )
 
+    
     @staticmethod
     async def search_mechanics(
-        city: str,
+        city: Optional[str] = None, # 💡 MODIFIED: Made city optional
         expertise: Optional[List[ExpertiseEnum]] = None,
         min_experience: int = 0,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         max_distance_km: float = 10
     ) -> List[MechanicOut]:
-        """Search mechanics by location and expertise using MongoDB geospatial queries."""
+        """
+        Search mechanics by location and expertise using MongoDB geospatial queries.
+        If location is provided, results are limited to 3 for relevance.
+        """
+        
+        # Determine the maximum number of results to fetch
+        is_geo_search = latitude is not None and longitude is not None and max_distance_km > 0
+        limit = 3 if is_geo_search else 100 # 💡 MODIFIED: Limit to 3 if location is used
+        
         try:
             # Base query for verified and available mechanics
             query = {
-                "city": city.lower(),
                 "is_verified": True,
                 "is_available": True,
                 "years_of_experience": {"$gte": min_experience}
             }
+            
+            # 💡 MODIFIED: Add city filter ONLY if provided
+            if city:
+                normalized_city = city.lower()
+                query["city"] = normalized_city
 
             # Add expertise filter if provided
             if expertise:
-                query["expertise"] = {"$all": expertise}
+                expertise_values = [e.value for e in expertise]
+                query["expertise"] = {"$all": expertise_values}
 
             # Add geospatial query if coordinates provided
-            if latitude is not None and longitude is not None:
+            if is_geo_search:
                 query["location"] = {
                     "$near": {
                         "$geometry": {
@@ -325,26 +339,39 @@ class MechanicService:
                         "$maxDistance": max_distance_km * 1000  # Convert km to meters
                     }
                 }
+            
+            # 🚀 DEBUGGING STEP 1: Log the final query before execution
+            logger.info(f"Search Type: {'GEOSPATIAL' if is_geo_search else 'GENERAL'}, Limit: {limit}")
+            logger.info(f"MongoDB Search Query: {json.dumps(query)}")
 
             # Execute query - MongoDB handles spatial search efficiently
-            cursor = db.mechanics_collection.find(query)
-            mechanics = await cursor.to_list(length=100)
-
-            # Handle missing fields
+            # Note: For real Motor/Pymongo, the limit should be applied to the cursor:
+            cursor = db.mechanics_collection.find(query).limit(limit) 
+            # For this mock, we pass the limit to to_list
+            # cursor = db.mechanics_collection.find(query)
+            mechanics = await cursor.to_list(length=limit)
+            
+            # 🚀 DEBUGGING STEP 2: Log the number of raw results found
+            logger.info(f"Found {len(mechanics)} raw mechanics matching the query.")
+            
             validated_mechanics = []
             for mechanic in mechanics:
-                fixed_mechanic = await MechanicService._fix_missing_fields(mechanic, str(mechanic["_id"]))
+                fixed_mechanic = await MechanicService._fix_missing_fields(mechanic, mechanic["_id"])
                 validated_mechanics.append(MechanicOut(**fixed_mechanic))
 
+            # 🚀 DEBUGGING STEP 3: Log the number of validated results
+            logger.info(f"Returning {len(validated_mechanics)} validated mechanics.")
+            
             return validated_mechanics
             
         except Exception as e:
-            logger.error(f"Error searching mechanics: {e}")
+            logger.error(f"Error searching mechanics: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error searching mechanics"
             )
-    
+
+
     @staticmethod
     async def create_geospatial_index():
         """Create 2dsphere index for location field."""
