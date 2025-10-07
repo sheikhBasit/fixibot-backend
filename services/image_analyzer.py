@@ -76,7 +76,8 @@ class ImageAnalyzer:
                 
                 # Immediate test of the client
                 test_response = await client.chat.completions.create(
-                    model="zai-org/GLM-4.1V-9B-Thinking",
+                    # model="zai-org/GLM-4.1V-9B-Thinking",
+                    model="Qwen/Qwen2.5-VL-7B-Instruct",
                     messages=[{"role": "user", "content": "Hello"}],
                     max_tokens=10
                 )
@@ -306,7 +307,8 @@ class ImageAnalyzer:
                 
                 start_time = time.time()
                 response = await self.client.chat.completions.create(
-                    model="zai-org/GLM-4.1V-9B-Thinking",
+                    # model="zai-org/GLM-4.1V-9B-Thinking",
+                    model="Qwen/Qwen2.5-VL-7B-Instruct",
                     messages=[{
                         "role": "user",
                         "content": [

@@ -1,10 +1,10 @@
-
 from datetime import datetime, time
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional, List, Union
-from models.mechanic import MechanicIn, MechanicOut, MechanicUpdate, ExpertiseEnum, WeekdayEnum, WorkingHours
+# 💡 MODIFIED: Added VehicleTypeEnum to imports
+from models.mechanic import MechanicIn, MechanicOut, MechanicUpdate, ExpertiseEnum, WeekdayEnum, WorkingHours, VehicleTypeEnum 
 from models.user import UserInDB
 from services.mechanics import MechanicService
 from services.cloudinary import upload_image
@@ -40,6 +40,8 @@ async def register_mechanic(
     latitude: float = Form(...),
     longitude: float = Form(...),
     expertise: List[ExpertiseEnum] = Form(...),
+    # 💡 ADDED: Vehicle Type for registration
+    serviced_vehicle_types: VehicleTypeEnum = Form(...), 
     years_of_experience: int = Form(...),
     profile_picture: Optional[Union[UploadFile,str]] = File(None),
     cnic_front: Optional[Union[UploadFile,str]] = File(None),  # Make CNIC optional
@@ -58,7 +60,7 @@ async def register_mechanic(
         cnic_front_url = None
         if cnic_front:
             cnic_front_url = await upload_image(cnic_front, expected_type='cnic')
-        
+         
         cnic_back_url = None
         if cnic_back:
             cnic_back_url = await upload_image(cnic_back, expected_type='cnic')
@@ -79,6 +81,8 @@ async def register_mechanic(
             latitude=latitude,
             longitude=longitude,
             expertise=expertise,
+            # 💡 ADDED: Vehicle Type to MechanicIn
+            serviced_vehicle_types=serviced_vehicle_types,
             years_of_experience=years_of_experience,
             profile_picture=profile_pic_url,
             cnic_front=cnic_front_url,
@@ -87,10 +91,10 @@ async def register_mechanic(
             working_days=working_days or [],
             working_hours=working_hours
         )
-        
+         
         # Create mechanic through service
         return await MechanicService.create_mechanic(mechanic_data)
-        
+         
     except HTTPException:
         raise
     except Exception as e:
@@ -112,6 +116,8 @@ async def update_mechanic_profile(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     expertise: Optional[List[ExpertiseEnum]] = Form(None),
+    # 💡 ADDED: Vehicle Type for profile update
+    serviced_vehicle_types: Optional[VehicleTypeEnum] = Form(None),
     years_of_experience: Optional[int] = Form(None),
     workshop_name: Optional[str] = Form(None),
     is_available: Optional[bool] = Form(None),
@@ -126,7 +132,7 @@ async def update_mechanic_profile(
     """Update current mechanic's profile (partial update)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+     
     # Validate time format if provided
     if start_time or end_time:
         time_pattern = r"^\d{2}:\d{2}$"
@@ -140,21 +146,21 @@ async def update_mechanic_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="end_time must be in HH:MM format (e.g., '18:00')"
             )
-    
-    
+     
+     
     # Handle file uploads if present
     profile_pic_url = None
     if profile_picture:
         profile_pic_url = await upload_image(profile_picture, expected_type='user')
-    
+     
     cnic_front_url = None
     if cnic_front:
         cnic_front_url = await upload_image(cnic_front, expected_type='cnic')
-    
+     
     cnic_back_url = None
     if cnic_back:
         cnic_back_url = await upload_image(cnic_back, expected_type='cnic')
-    
+     
     working_hours = None
     if start_time and end_time:
         try:
@@ -165,7 +171,7 @@ async def update_mechanic_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid working hours: {str(e)}"
             )
-    
+     
     # Convert empty strings to None to preserve existing values
     def clean_form_value(value, value_type=None):
         """
@@ -182,7 +188,7 @@ async def update_mechanic_profile(
                 return None
         return value
 
-    
+     
     # Create update data model - convert empty strings to None
     update_data = MechanicUpdate(
         first_name=clean_form_value(first_name),
@@ -195,6 +201,8 @@ async def update_mechanic_profile(
         latitude=latitude,
         longitude=longitude,
         expertise=expertise,
+        # 💡 ADDED: Vehicle Type to MechanicUpdate
+        serviced_vehicle_types=serviced_vehicle_types,
         years_of_experience=years_of_experience,
         workshop_name=clean_form_value(workshop_name.lower() if workshop_name else None),
         is_available=is_available,
@@ -204,7 +212,7 @@ async def update_mechanic_profile(
         cnic_front=cnic_front_url,
         cnic_back=cnic_back_url
     )
-    
+     
     return await MechanicService.update_mechanic(str(current_user.id), update_data)
 
 
@@ -223,6 +231,8 @@ async def update_mechanic_admin(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     expertise: Optional[List[ExpertiseEnum]] = Form(None),
+    # 💡 ADDED: Vehicle Type for admin update
+    serviced_vehicle_types: Optional[VehicleTypeEnum] = Form(None),
     years_of_experience: Optional[int] = Form(None),
     workshop_name: Optional[str]=Form(None),
     is_verified: Optional[bool] = Form(None),
@@ -260,6 +270,8 @@ async def update_mechanic_admin(
         "latitude": latitude,  # No need to clean floats
         "longitude": longitude, # No need to clean floats
         "expertise": clean_form_value(expertise),
+        # 💡 ADDED: Vehicle Type to cleaned_data
+        "serviced_vehicle_types": clean_form_value(serviced_vehicle_types), 
         "years_of_experience": clean_form_value(years_of_experience),
         "workshop_name": clean_form_value(workshop_name),
         "is_verified": is_verified,
@@ -271,21 +283,21 @@ async def update_mechanic_admin(
         "cnic_front": cnic_front,
         "cnic_back": cnic_back
     }
-    
+     
     # Handle file uploads if present
     # Check if value is a file, or a URL string from a previous update
     profile_pic_url = cleaned_data["profile_picture"]
     if isinstance(profile_pic_url, UploadFile):
         profile_pic_url = await upload_image(profile_pic_url, expected_type='user')
-    
+     
     cnic_front_url = cleaned_data["cnic_front"]
     if isinstance(cnic_front_url, UploadFile):
         cnic_front_url = await upload_image(cnic_front_url, expected_type='cnic')
-    
+     
     cnic_back_url = cleaned_data["cnic_back"]
     if isinstance(cnic_back_url, UploadFile):
         cnic_back_url = await upload_image(cnic_back_url, expected_type='cnic')
-    
+     
     # --- Corrected Working Hours and Days Handling ---
     # The cleaned_data dictionary now has None for missing values
     working_hours = None
@@ -313,6 +325,8 @@ async def update_mechanic_admin(
         latitude=cleaned_data["latitude"],
         longitude=cleaned_data["longitude"],
         expertise=cleaned_data["expertise"],
+        # 💡 ADDED: Vehicle Type to MechanicUpdate
+        serviced_vehicle_types=cleaned_data["serviced_vehicle_types"],
         years_of_experience=cleaned_data["years_of_experience"],
         workshop_name=cleaned_data["workshop_name"],
         is_verified=cleaned_data["is_verified"],
@@ -323,7 +337,7 @@ async def update_mechanic_admin(
         cnic_front=cnic_front_url,
         cnic_back=cnic_back_url
     )
-    
+     
     return await MechanicService.update_mechanic(mechanic_id, update_data)
 
 @router.get("/{mechanic_id}", response_model=MechanicOut)
@@ -355,6 +369,7 @@ async def search_nearby_mechanics(
     # 💡 MODIFIED: Make city optional in the endpoint
     city: Optional[str] = Query(None, description="City to search in (optional)"),
     expertise: Optional[str] = Query(None, description="Comma-separated list of expertise"),
+    vehicle_type: Optional[VehicleTypeEnum] = Query(None, description="Filter by vehicle type (e.g., 'car')"),
     min_experience: conint(ge=0, le=50) = 0,
     latitude: Optional[float] = Query(None, description="Latitude for proximity search"),
     longitude: Optional[float] = Query(None, description="Longitude for proximity search"),
@@ -362,7 +377,7 @@ async def search_nearby_mechanics(
     current_user: UserInDB = Depends(get_current_user)
 ):
     """Search mechanics by location and expertise."""
-    
+     
     expertise_list = None
     if expertise:
         try:
@@ -372,12 +387,13 @@ async def search_nearby_mechanics(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid expertise value provided"
             )
-    
+     
     return await MechanicService.search_mechanics(
         # Pass the city directly (it's Optional[str])
         city=city, 
         expertise=expertise_list,
         min_experience=min_experience,
+        vehicle_type=vehicle_type,
         latitude=latitude,
         longitude=longitude,
         max_distance_km=max_distance_km
@@ -391,7 +407,7 @@ async def verify_mechanic(
     """Verify or unverify a mechanic (admin only)."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
-    
+     
     success = await MechanicService.verify_mechanic(mechanic_id, verify)
     if not success:
         raise HTTPException(status_code=404, detail="Mechanic not found")

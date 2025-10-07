@@ -3,7 +3,8 @@ import re
 
 from bson import ObjectId
 import pymongo
-from models.mechanic import ExpertiseEnum, MechanicIn, MechanicOut, MechanicUpdate, WorkingHours
+
+from models.mechanic import ExpertiseEnum, VehicleTypeEnum, MechanicIn, MechanicOut, MechanicUpdate, WorkingHours
 from database import db
 from utils.py_object import PyObjectId
 import json
@@ -296,6 +297,8 @@ class MechanicService:
     async def search_mechanics(
         city: Optional[str] = None, # 💡 MODIFIED: Made city optional
         expertise: Optional[List[ExpertiseEnum]] = None,
+        # 👇 NEW PARAMETER FOR VEHICLE ENUM TYPE
+        vehicle_types: Optional[VehicleTypeEnum] = None,
         min_experience: int = 0,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
@@ -327,6 +330,11 @@ class MechanicService:
             if expertise:
                 expertise_values = [e.value for e in expertise]
                 query["expertise"] = {"$all": expertise_values}
+            
+            if vehicle_type:
+                # The DB field is 'serviced_vehicle_types' (single string)
+                # We check for a match on the single string value.
+                query["serviced_vehicle_types"] = vehicle_type.value #
 
             # Add geospatial query if coordinates provided
             if is_geo_search:

@@ -15,7 +15,6 @@ from datetime import datetime
 from utils.py_object import PyObjectId
 
 
-
 class ExpertiseEnum(str, Enum):
     """Enum representing mechanic's areas of expertise."""
     ENGINE = "engine"
@@ -52,6 +51,19 @@ class WeekdayEnum(str, Enum):
     SUNDAY = "sunday"
 
 
+# --- NEW ENUM FOR VEHICLE TYPES ---
+class VehicleTypeEnum(str, Enum):
+    """Enum representing the types of vehicles a mechanic services."""
+    CAR = "car"
+    LIGHT_TRUCK = "light_truck"
+    HEAVY_TRUCK = "heavy_truck"
+    MOTORCYCLE = "motorcycle"
+    BUS = "bus"
+    VAN = "van"
+    DIESEL = "diesel" # For specialized diesel mechanics
+    HYBRID_EV = "hybrid_ev" # For specialized electric vehicle mechanics
+
+
 class WorkingHours(BaseModel):
     """Model representing a mechanic's working hours."""
     start_time: Annotated[
@@ -75,7 +87,7 @@ class WorkingHours(BaseModel):
 
     @field_validator('end_time')
     @classmethod
-    def validate_time_range(cls, v: str, info) -> str:  # Change parameter type to str
+    def validate_time_range(cls, v: str, info) -> str:
         """Ensure end time is after start time."""
         if 'start_time' in info.data and v <= info.data['start_time']:
             raise ValueError('End time must be after start time')
@@ -89,7 +101,6 @@ class WorkingHours(BaseModel):
         start_h, start_m = map(int, self.start_time.split(':'))
         end_h, end_m = map(int, self.end_time.split(':'))
         return (end_h - start_h) + (end_m - start_m) / 60
-
 
 
 class MechanicBase(BaseModel):
@@ -153,6 +164,17 @@ class MechanicBase(BaseModel):
             examples=[["engine", "electrical"]]
         )
     ]
+    # --- ADDED FIELD ---
+    serviced_vehicle_types: Annotated[
+        VehicleTypeEnum,
+        Field(
+            ...,
+            min_length=1,
+            description="List of vehicle types the mechanic services (e.g., CAR, TRUCK)",
+            examples=[["car", "light_truck", "motorcycle"]]
+        )
+    ]
+    # ------------------
     province: Annotated[
         str,
         Field(
@@ -262,7 +284,8 @@ class MechanicBase(BaseModel):
         if not v:
             raise ValueError("At least one expertise is required")
         return sorted(list(set(v)))  # Remove duplicates and sort
-
+    
+    
     @model_validator(mode='after')
     def validate_working_days_hours(self) -> 'MechanicBase':
         """Ensure working hours are provided if working days are specified."""
@@ -337,6 +360,7 @@ class MechanicRegistration(MechanicBase):
                 "phone_number": "+923001234567",
                 "email": "ahmed@example.com",
                 "expertise": ["engine", "electrical"],
+                "serviced_vehicle_types": "car", 
                 "province": "Punjab",
                 "city": "Lahore",
                 "address": "Street 123, Model Town",
@@ -409,9 +433,6 @@ class MechanicOut(MechanicRegistration):
         """Combine first and last name."""
         return f"{self.first_name} {self.last_name}"
 
-    # NOTE: latitude and longitude are already defined as regular fields in MechanicBase
-    # so we don't need to define them as computed fields here
-
     @computed_field
     @property
     def premium_services(self) -> List[ExpertiseEnum]:
@@ -430,6 +451,7 @@ class MechanicOut(MechanicRegistration):
                 "phone_number": "+923001234567",
                 "email": "ahmed@example.com",
                 "expertise": ["engine", "electrical"],
+                "serviced_vehicle_types":  "light_truck",
                 "province": "Punjab",
                 "city": "Lahore",
                 "address": "Street 123, Model Town",
@@ -496,6 +518,15 @@ class MechanicSearchParams(BaseModel):
             None,
             description="Filter by specific expertise",
             examples=[["engine", "electrical"]]
+        )
+    ]
+    # --- ADDED SEARCH PARAMETER ---
+    vehicle_type: Annotated[
+        Optional[VehicleTypeEnum],
+        Field(
+            None,
+            description="Filter by vehicle type the mechanic services",
+            examples=["car"]
         )
     ]
     min_years_experience: Annotated[
@@ -572,6 +603,16 @@ class MechanicUpdate(BaseModel):
             description="Updated areas of expertise"
         )
     ]
+    # --- ADDED FIELD FOR UPDATE ---
+    serviced_vehicle_types: Annotated[
+        Optional[VehicleTypeEnum],
+        Field(
+            None,
+            min_length=1,
+            description="Updated list of vehicle types the mechanic services"
+        )
+    ]
+    # ----------------------------
     province: Annotated[
         Optional[str],
         Field(
