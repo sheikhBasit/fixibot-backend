@@ -58,7 +58,7 @@ def create_diagnostic_agent(api_key: str):
                 temperature = 0.7
                 max_tokens = 256
             else:
-                model = "gemma2-9b-it"
+                model = "openai/gpt-oss-120b"
                 temperature = 0.8
                 max_tokens = 1024
 
