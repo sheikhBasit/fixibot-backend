@@ -58,8 +58,8 @@ def create_diagnostic_agent(api_key: str):
                 temperature = 0.7
                 max_tokens = 256
             else:
-                model = "openai/gpt-oss-120b"
-                temperature = 0.8
+                model = "llama-3.3-70b-versatile"
+                temperature = 0.5
                 max_tokens = 1024
 
             messages = [{"role": "system", "content": system_prompt}]
