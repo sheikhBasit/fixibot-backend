@@ -106,7 +106,7 @@ def _create_diagnostic_agent() -> RunnableLambdaType[Union[ChatInputDict, Any], 
 
                 # Get and return response
                 response: ChatCompletion = client.chat.completions.create( # type: ignore
-                    model="gemma2-9b-it",
+                    model="openai/gpt-oss-120b",
                     messages=messages,  # type: ignore  # Workaround for messages type mismatch
                     temperature=0.8,
                     top_p=1,
