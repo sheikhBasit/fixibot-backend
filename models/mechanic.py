@@ -26,11 +26,11 @@ class ExpertiseEnum(str, Enum):
     AIR_CONDITIONING = "air_conditioning"
     DIAGNOSTICS = "diagnostics"
     OIL_CHANGE = "oil_change"
-    TIRE_REPAIR = "tire_repair"
+    TYRE = "tyre"
     EXHAUST_SYSTEM = "exhaust_system"
-    BATTERY_REPLACEMENT = "battery_replacement"
-    RADIATOR_REPAIR = "radiator_repair"
-    FUEL_SYSTEM = "fuel_system"
+    BATTERY = "battery"
+    RADIATOR = "radiator"
+    FUEL_SYSTEM = "fuel"
     ELECTRONICS = "electronics"
     PAINTING = "painting"
 
@@ -55,13 +55,12 @@ class WeekdayEnum(str, Enum):
 class VehicleTypeEnum(str, Enum):
     """Enum representing the types of vehicles a mechanic services."""
     CAR = "car"
-    LIGHT_TRUCK = "light_truck"
-    HEAVY_TRUCK = "heavy_truck"
-    MOTORCYCLE = "motorcycle"
-    BUS = "bus"
+    BIKE = "bike"
+    TRUCK = "truck"
     VAN = "van"
-    DIESEL = "diesel" # For specialized diesel mechanics
-    HYBRID_EV = "hybrid_ev" # For specialized electric vehicle mechanics
+    SUV = "suv"
+    BUS = "bus"
+    OTHER = "other"
 
 
 class WorkingHours(BaseModel):
