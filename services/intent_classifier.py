@@ -50,7 +50,7 @@ class IntentClassifier:
                     {"role": "system", "content": "You are an intent classification expert. Respond with only the category name."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,
+                temperature=0.2,
                 max_tokens=20
             )
             

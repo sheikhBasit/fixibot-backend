@@ -26,19 +26,49 @@ class ChatService:
         self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
     
-    async def _determine_processing_path(self, user_input: str, chat_history: list) -> Literal["simple", "rag", "command"]:
+    def _is_off_topic_or_inappropriate(self, text: str) -> bool:
+        """Check if the message is off-topic or inappropriate"""
+        # List of non-automotive topics to redirect
+        off_topic_keywords = [
+            "food", "restaurant", "movie", "weather", "sports", "game",
+            "politics", "dating", "cryptocurrency", "stock market"
+        ]
+        
+        # Check for off-topic conversations
+        if any(keyword in text.lower() for keyword in off_topic_keywords):
+            return True
+            
+        # Check for very short or nonsensical inputs
+        if len(text.strip()) < 3 or text.strip().isdigit():
+            return True
+            
+        return False
+
+    async def _determine_processing_path(self, user_input: str, chat_history: list) -> Literal["simple", "rag", "command", "off_topic"]:
         """Determine the processing path based on user intent"""
         intent = await self.intent_classifier.classify_intent(user_input, chat_history)
         
         logger.info(f"Detected intent: {intent} for message: '{user_input}'")
         
-        if intent in ["greeting", "small_talk"]:
+        # Check for off-topic or inappropriate content first
+        if self._is_off_topic_or_inappropriate(user_input):
+            return "off_topic"
+        
+        # More specific intent classification
+        if any(word.lower() in user_input.lower() for word in ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"]) and len(user_input.split()) <= 4:
             return "simple"
+        elif any(word.lower() in user_input.lower() for word in ["bye", "goodbye", "thanks", "thank you"]) and len(user_input.split()) <= 4:
+            return "simple"
+        elif any(keyword in user_input.lower() for keyword in ["fix", "repair", "broken", "not working", "problem", "issue", "help", "diagnose", "check", "car", "vehicle", "engine", "brake", "tire", "wheel", "battery", "oil", "maintenance"]):
+            return "rag"  # Technical questions get full diagnosis
         elif intent in ["technical_question", "vehicle_diagnosis"]:
             return "rag"
         elif intent == "command":
             return "command"
         else:
+            # Check if the message is very short or unclear
+            if len(user_input.split()) <= 2:
+                return "off_topic"
             return "rag"  # Default to RAG for unknown intents
     
     def _create_simple_response_chain(self) -> RunnableSerializable:
@@ -56,12 +86,36 @@ class ChatService:
                     return {**inputs, "diagnosis_output": predefined_response}
                 
                 # Fallback to LLM for more complex simple responses
+                # Analyze chat history for context
+                recent_messages = inputs.get("chat_history", [])[-3:]
+                off_topic_messages = sum(1 for msg in recent_messages 
+                                       if self._is_off_topic_or_inappropriate(msg.content if hasattr(msg, 'content') else str(msg)))
+
                 prompt = f"""
                 User message: "{inputs['prompt']}"
+                Recent chat history shows {'several off-topic messages' if off_topic_messages > 1 else 'normal conversation'}.
                 
-                Respond naturally and conversationally. Be friendly and helpful.
-                Keep your response brief and appropriate for a vehicle mechanic assistant.
-                If this is small talk or greeting, keep it very short (1-2 sentences).
+                You are a professional automotive technician. Keep your responses natural and conversational while maintaining expertise.
+                
+                Guidelines:
+                1. Keep responses brief and natural
+                2. Be friendly and approachable
+                3. Focus on automotive topics naturally
+                4. Redirect off-topic conversations smoothly
+                5. Maintain professional expertise
+                
+                Style Requirements:
+                - Be conversational but professional
+                - Avoid repetitive phrases
+                - Don't mention vehicle specs unless asked
+                - Keep technical terms simple unless needed
+                - Use natural transitions in conversation
+                
+                Examples:
+                - "Hello! I'm your automotive specialist. What vehicle concerns can I address for you today?"
+                - "I'm here to help with any vehicle-related questions. What seems to be the issue with your car?"
+                - "While I appreciate the conversation, I'm specifically trained for automotive diagnostics. How can I help with your vehicle today?"
+                - "Let's focus on your vehicle needs. What automotive concerns would you like me to address?"
                 """
                 
                 response = await self.diagnostic_agent.ainvoke({
@@ -111,11 +165,20 @@ class ChatService:
                     [msg.content for msg in chat_history[-4:] if hasattr(msg, 'content')]
                 )
 
+                # Build context-aware query
+                is_model_specific = any(word in prompt.lower() for word in [
+                    "where is", "location", "specific", "particular", "this model",
+                    "my model", "different", "varies", "compatible"
+                ])
+
                 enhanced_question = (
-                 f"Conversation Context:\n{history_context}\n\n"
-                    f"User Query for a specific vehicle: {vehicle.get('brand', 'Unknown')} {vehicle.get('model', 'Unknown')} {vehicle.get('fuel_type', 'Unknown')}"
-                    f"({vehicle.get('transmission', 'Unknown')} {vehicle.get('year', 'Unknown')}) - {prompt}"
+                    f"Conversation Context:\n{history_context}\n\n"
+                    f"User Query: {prompt}"
                 )
+
+                # Only add vehicle details if the query seems to need model-specific info
+                if is_model_specific:
+                    enhanced_question += f"\nVehicle Details: {vehicle.get('brand', '')} {vehicle.get('model', '')} {vehicle.get('year', '')}"
 
                 # Manual embedding and search
                 query_embedding = embed_text(enhanced_question)
@@ -170,25 +233,57 @@ class ChatService:
                         chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append(msg)
-                enhanced_system_prompt = f"""You are a specialized vehicle diagnostic assistant for a **{vehicle_info['year']} {vehicle_info['make']} {vehicle_info['model']}**.
-                Your goal is to provide **highly specific, actionable advice** for the user's vehicle problem.
-                Use the provided context and your expert knowledge to diagnose the issue and propose a solution.
+                enhanced_system_prompt = f"""You are an expert automotive diagnostic technician with deep knowledge of all vehicle types.
 
-                - **Vehicle Details**:
-                    - Make: {vehicle_info['make']}
-                    - Model: {vehicle_info['model']}
-                    - Year: {vehicle_info['year']}
-                    - Fuel Type: {vehicle_info['fuel_type']}
-                    - Engine Type: {vehicle_info['engine_type']}
+                CORE ROLE:
+                - Provide accurate, relevant diagnostic advice and solutions
+                - Focus on safety-critical information and proper repair procedures
+                - Maintain a professional yet conversational tone
 
-                - **User Problem**: {inputs['prompt']}
+                VEHICLE CONTEXT (Use contextually, don't repeat unnecessarily):
+                - Make: {vehicle_info['make']}
+                - Model: {vehicle_info['model']}
+                - Year: {vehicle_info['year']}
+                - Fuel Type: {vehicle_info['fuel_type']}
+                - Engine Type: {vehicle_info['engine_type']}
 
-                - **Instructions**:
-                1. Start by acknowledging the user's vehicle and problem.
-                2. **Directly apply** any relevant information from the 'Knowledge Base Context' and 'Image Analysis' to your diagnosis.
-                3. Provide a step-by-step diagnostic process tailored to the specific vehicle model.
-                4. If the provided context is insufficient for a specific answer, explain what additional information is needed (e.g., "Can you provide a picture of the engine bay?").
-                5. Avoid general answers unless no specific information is available.
+                RESPONSE GUIDELINES:
+                1. Keep conversation natural and flowing
+                2. Structure responses clearly:
+                   - Acknowledge the issue directly
+                   - Explain possible causes
+                   - Provide clear diagnostic steps
+                   - Recommend appropriate actions
+                3. Reference vehicle details ONLY when relevant:
+                   - When specific parts differ by model
+                   - When discussing model-specific issues
+                   - When location of components varies
+                4. DON'T mention vehicle details when:
+                   - Discussing general maintenance
+                   - Giving universal advice
+                   - In follow-up messages
+                   - When context is already clear
+                5. Maintain natural conversation flow:
+                   - Use pronouns (it, your vehicle) instead of repeating specs
+                   - Only mention model details for specific technical info
+                   - Keep responses conversational but professional
+                6. Focus on the issue:
+                   - Address the problem directly
+                   - Give clear, actionable advice
+                   - Ask relevant follow-up questions
+                7. Safety emphasis:
+                   - Highlight critical safety concerns
+                   - Recommend professional help when needed
+                   - Provide appropriate warnings
+
+                IMPORTANT:
+                - Stay focused on the vehicle issue
+                - Be specific to this make/model/year
+                - Avoid generic advice
+                - Prioritize safety
+                - Reference technical knowledge from context when available
+                
+                Current User Query: "{inputs['prompt']}"
                 """
 
                 llm_input = {
@@ -222,6 +317,30 @@ class ChatService:
             | RunnableLambda(diagnostic_chain)
         )
 
+    def _create_off_topic_chain(self) -> RunnableSerializable:
+        """Chain for handling off-topic or inappropriate conversations"""
+        async def off_topic_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            chat_history = inputs.get("chat_history", [])
+            off_topic_count = sum(1 for msg in chat_history[-3:] if self._is_off_topic_or_inappropriate(msg.content if hasattr(msg, 'content') else str(msg)))
+            
+            # If multiple off-topic messages in a row, give stronger redirect
+            if off_topic_count >= 2:
+                response = """I am a specialized automotive diagnostic assistant. I can only help with vehicle-related questions and issues. 
+                Please ask me about your car's maintenance, repairs, or technical problems. If you have other questions, 
+                you might want to consult a different service."""
+            else:
+                response = """I'm your automotive diagnostic assistant, so I can only help with vehicle-related questions. 
+                What would you like to know about your car? I can help with:
+                - Vehicle diagnostics and repairs
+                - Maintenance questions
+                - Technical specifications
+                - Common problems and solutions
+                - Warning lights and error codes"""
+            
+            return {**inputs, "diagnosis_output": response}
+        
+        return RunnableLambda(off_topic_response)
+
     def _create_processing_chain(self) -> RunnableSerializable:
         """Create the complete processing chain with intent-based routing"""
         
@@ -233,7 +352,11 @@ class ChatService:
             
             logger.info(f"Routing to: {processing_path} processing")
             
-            if processing_path == "simple":
+            if processing_path == "off_topic":
+                # Handle off-topic conversations
+                off_topic_chain = self._create_off_topic_chain()
+                return await off_topic_chain.ainvoke(inputs)
+            elif processing_path == "simple":
                 # Use simple response chain
                 simple_chain = self._create_simple_response_chain()
                 return await simple_chain.ainvoke(inputs)
@@ -326,15 +449,22 @@ Guidelines:
         """Generate a summary title for the chat based on the first message"""
         try:
             prompt = f"""
-            Create a very short (3-5 word) title summarizing this vehicle issue:
+            Create a precise, technical title (3-5 words) for this automotive consultation:
             "{first_message}"
             
-            Respond ONLY with the title text, no quotes or other formatting.
-            Example outputs:
-            - Engine knocking sound
-            - Brake system issue
-            - Electrical problem
-            - Transmission trouble
+            Requirements:
+            1. Use proper automotive terminology
+            2. Be specific about the system or component
+            3. Include the issue type (noise, malfunction, maintenance, etc.)
+            4. Respond ONLY with the title - no quotes or formatting
+            
+            Example titles:
+            - Brake Pad Wear Diagnosis
+            - Engine Misfire Investigation
+            - Transmission Fluid Service
+            - Suspension Noise Analysis
+            - Battery Charging System
+            - Steering Alignment Check
             """
             
             response = await self.diagnostic_agent.ainvoke({
