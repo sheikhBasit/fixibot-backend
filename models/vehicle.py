@@ -13,20 +13,32 @@ from utils.py_object import PyObjectId
 from enum import Enum
 
 
-class VehicleType(str, Enum):
-    """Enum representing different types of vehicles."""
+class VehicleCategory(str, Enum):
+    """Main vehicle categories."""
+    MOTORCYCLE = "motorcycle"
     CAR = "car"
-    BIKE = "bike"
-    TRUCK = "truck"
-    VAN = "van"
-    SUV = "suv"
-    BUS = "bus"
-    OTHER = "other"
 
-    @classmethod
-    def motorized_types(cls) -> List['VehicleType']:
-        """Vehicle types that typically have engines."""
-        return [cls.CAR, cls.TRUCK, cls.VAN, cls.SUV, cls.BUS]
+
+class MotorcycleSubType(str, Enum):
+    """Sub-types for motorcycles."""
+    SPORTS_BIKE = "sports_bike"
+    SUPERBIKE = "superbike"
+    SCOOTER = "scooter"
+    ELECTRIC_MOTORCYCLE = "electric_motorcycle"
+    ADVENTURE_BIKE = "adventure_bike"
+    CRUISER = "cruiser"
+    STANDARD_MOTORCYCLE = "standard_motorcycle"
+
+
+class CarSubType(str, Enum):
+    """Sub-types for cars."""
+    SUV = "suv"
+    SEDAN = "sedan"
+    ELECTRIC_CAR = "electric_car"
+    HYBRID = "hybrid"
+    VAN = "van"
+    HATCHBACK = "hatchback"
+    SUPERCAR = "supercar"
 
 
 class FuelType(str, Enum):
@@ -53,12 +65,14 @@ class TransmissionType(str, Enum):
     SEMI_AUTOMATIC = "semi_automatic"
     CVT = "cvt"
     DUAL_CLUTCH = "dual_clutch"
+    DIRECT_DRIVE = "direct_drive"  # For electric vehicles
     OTHER = "other"
 
     @classmethod
     def automatic_types(cls) -> List['TransmissionType']:
         """Automatic transmission variants."""
         return [cls.AUTOMATIC, cls.CVT, cls.DUAL_CLUTCH]
+
 
 class BaseVehicleModel(BaseModel):
     """Base model containing shared validation logic."""
@@ -68,14 +82,15 @@ class BaseVehicleModel(BaseModel):
         """Shared year validation for all models."""
         if v is not None:
             current_year = datetime.now().year
-            if v < 1886:  # First car was patented in 1886
+            if v < 1886:
                 raise ValueError("Year seems too old for a vehicle")
             if v > current_year + 1:
                 raise ValueError("Manufacturing year cannot be in the future")
             if v < 1000 or v > 9999:
                 raise ValueError("Year must be exactly 4 digits")
         return v
-    
+
+
 class VehicleModel(BaseVehicleModel):
     """Core model representing a vehicle with comprehensive details."""
     id: Annotated[
@@ -125,12 +140,20 @@ class VehicleModel(BaseVehicleModel):
             examples=[2020]
         )
     ]
-    type: Annotated[
-        VehicleType,
+    category: Annotated[
+        VehicleCategory,
         Field(
             ...,
-            description="Type of vehicle",
+            description="Main vehicle category (motorcycle or car)",
             examples=["car"]
+        )
+    ]
+    sub_type: Annotated[
+        Optional[str],
+        Field(
+            None,
+            description="Vehicle sub-type based on category",
+            examples=["sedan"]
         )
     ]
     fuel_type: Annotated[
@@ -226,16 +249,31 @@ class VehicleModel(BaseVehicleModel):
     @field_validator('year')
     @classmethod
     def validate_year(cls, v: Optional[int]) -> Optional[int]:
-        return cls._validate_year(v) 
+        return cls._validate_year(v)
+
     @model_validator(mode='after')
     def validate_vehicle_properties(self) -> 'VehicleModel':
         """Validate logical relationships between vehicle properties."""
-        if self.type == VehicleType.BIKE and self.transmission == TransmissionType.AUTOMATIC:
-            raise ValueError("Bikes typically don't have automatic transmissions")
+        # Validate sub_type matches category
+        if self.category == VehicleCategory.MOTORCYCLE:
+            if self.sub_type and self.sub_type not in [e.value for e in MotorcycleSubType]:
+                raise ValueError(f"Invalid motorcycle sub-type: {self.sub_type}")
+        elif self.category == VehicleCategory.CAR:
+            if self.sub_type and self.sub_type not in [e.value for e in CarSubType]:
+                raise ValueError(f"Invalid car sub-type: {self.sub_type}")
         
-        if self.type in VehicleType.motorized_types() and self.fuel_type is None:
+        # Transmission validation
+        if self.category == VehicleCategory.MOTORCYCLE and self.transmission == TransmissionType.AUTOMATIC:
+            raise ValueError("Motorcycles typically don't have automatic transmissions")
+        
+        # Fuel type requirements
+        motorized_categories = [VehicleCategory.MOTORCYCLE, VehicleCategory.CAR]
+        if self.category in motorized_categories and self.fuel_type is None:
             raise ValueError("Motorized vehicles must specify fuel type")
-            
+        
+        # Direct drive only for electric vehicles
+        if self.transmission == TransmissionType.DIRECT_DRIVE and self.fuel_type != FuelType.ELECTRIC:
+            raise ValueError("Direct drive transmission is only for electric vehicles")
             
         return self
 
@@ -258,7 +296,8 @@ class VehicleModel(BaseVehicleModel):
                 "model": "Corolla",
                 "brand": "Toyota",
                 "year": 2020,
-                "type": "car",
+                "category": "car",
+                "sub_type": "sedan",
                 "fuel_type": "petrol",
                 "transmission": "automatic",
                 "mileage_km": 50000,
@@ -272,115 +311,81 @@ class VehicleIn(BaseVehicleModel):
     """Input model for creating new vehicle entries."""
     user_id: Annotated[
         PyObjectId,
-        Field(
-            ...,
-            description="ID of the user who owns this vehicle"
-        )
+        Field(..., description="ID of the user who owns this vehicle")
     ]
     model: Annotated[
         str,
-        Field(
-            ...,
-            min_length=2,
-            max_length=50,
-            description="Vehicle model name"
-        )
+        Field(..., min_length=2, max_length=50, description="Vehicle model name")
     ]
     brand: Annotated[
         Optional[str],
-        Field(
-            None,
-            min_length=2,
-            max_length=50,
-            description="Vehicle brand/manufacturer"
-        )
+        Field(None, min_length=2, max_length=50, description="Vehicle brand/manufacturer")
     ]
     year: Annotated[
         Optional[int],
-        Field(
-            None,
-            ge=1886,
-            le=datetime.now().year + 1,
-            description="Manufacturing year"
-        )
+        Field(None, ge=1886, le=datetime.now().year + 1, description="Manufacturing year")
     ]
-    type: Annotated[
-        VehicleType,
-        Field(
-            ...,
-            description="Type of vehicle"
-        )
+    category: Annotated[
+        VehicleCategory,
+        Field(..., description="Main vehicle category (motorcycle or car)")
+    ]
+    sub_type: Annotated[
+        Optional[str],
+        Field(None, description="Vehicle sub-type based on category")
     ]
     fuel_type: Annotated[
         Optional[FuelType],
-        Field(
-            None,
-            description="Type of fuel the vehicle uses"
-        )
+        Field(None, description="Type of fuel the vehicle uses")
     ]
     transmission: Annotated[
         Optional[TransmissionType],
-        Field(
-            None,
-            description="Type of transmission"
-        )
+        Field(None, description="Type of transmission")
     ]
     history: Annotated[
         Optional[str],
-        Field(
-            None,
-            max_length=2000,
-            description="Maintenance and accident history"
-        )
+        Field(None, max_length=2000, description="Maintenance and accident history")
     ]
     images: Annotated[
         List[str],
-        Field(
-            default_factory=list,
-            max_length=10,
-            description="List of image URLs for the vehicle"
-        )
+        Field(default_factory=list, max_length=10, description="List of image URLs for the vehicle")
     ]
     registration_number: Annotated[
         Optional[str],
-        Field(
-            None,
-            min_length=5,
-            max_length=20,
-            description="Official registration/license plate number"
-        )
+        Field(None, min_length=5, max_length=20, description="Official registration/license plate number")
     ]
     mileage_km: Annotated[
         int,
-        Field(
-            default=0,
-            ge=0,
-            description="Current mileage in kilometers"
-        )
+        Field(default=0, ge=0, description="Current mileage in kilometers")
     ]
     is_primary: Annotated[
         bool,
-        Field(
-            default=False,
-            description="Whether this is the user's primary vehicle"
-        )
+        Field(default=False, description="Whether this is the user's primary vehicle")
     ]
     is_active: Annotated[
         bool,
-        Field(
-            default=True,
-            description="Whether this vehicle is currently active"
-        )
+        Field(default=True, description="Whether this vehicle is currently active")
     ]
+
     @field_validator('year')
     @classmethod
     def validate_year(cls, v: Optional[int]) -> Optional[int]:
-        return cls._validate_year(v) 
+        return cls._validate_year(v)
+
     @model_validator(mode='after')
     def validate_new_vehicle(self) -> 'VehicleIn':
         """Additional validations for new vehicle creation."""
-        if self.type in VehicleType.motorized_types() and self.fuel_type is None:
-            raise ValueError("Motorized vehicles must specify fuel type")
+        if self.category == VehicleCategory.MOTORCYCLE:
+            if self.sub_type and self.sub_type not in [e.value for e in MotorcycleSubType]:
+                raise ValueError(f"Invalid motorcycle sub-type: {self.sub_type}")
+        elif self.category == VehicleCategory.CAR:
+            if self.sub_type and self.sub_type not in [e.value for e in CarSubType]:
+                raise ValueError(f"Invalid car sub-type: {self.sub_type}")
+        
+        if self.fuel_type is None:
+            raise ValueError("Fuel type is required")
+        
+        if self.transmission is None:
+            raise ValueError("Transmission type is required")
             
         if self.mileage_km > 500000:
             raise ValueError("Mileage seems unusually high, please verify")
@@ -395,8 +400,10 @@ class VehicleIn(BaseVehicleModel):
                 "model": "Corolla",
                 "brand": "Toyota",
                 "year": 2020,
-                "type": "car",
+                "category": "car",
+                "sub_type": "sedan",
                 "fuel_type": "petrol",
+                "transmission": "automatic",
                 "mileage_km": 50000
             }
         }
@@ -405,113 +412,36 @@ class VehicleIn(BaseVehicleModel):
 
 class VehicleUpdate(BaseVehicleModel):
     """Model for updating vehicle information."""
-    model: Annotated[
-        Optional[str],
-        Field(
-            None,
-            min_length=2,
-            max_length=50,
-            description="Updated model name"
-        )
-    ]
-    brand: Annotated[
-        Optional[str],
-        Field(
-            None,
-            min_length=2,
-            max_length=50,
-            description="Updated brand name"
-        )
-    ]
-    year: Annotated[
-        Optional[int],
-        Field(
-            None,
-            ge=1886,
-            le=datetime.now().year + 1,
-            description="Updated manufacturing year"
-        )
-    ]
-    type: Annotated[
-        Optional[VehicleType],
-        Field(
-            None,
-            description="Updated vehicle type"
-        )
-    ]
-    fuel_type: Annotated[
-        Optional[FuelType],
-        Field(
-            None,
-            description="Updated fuel type"
-        )
-    ]
-    transmission: Annotated[
-        Optional[TransmissionType],
-        Field(
-            None,
-            description="Updated transmission type"
-        )
-    ]
-    history: Annotated[
-        Optional[str],
-        Field(
-            None,
-            max_length=2000,
-            description="Updated maintenance history"
-        )
-    ]
-    images: Annotated[
-        Optional[List[str]],
-        Field(
-            None,
-            max_length=10,
-            description="Updated list of image URLs"
-        )
-    ]
-    registration_number: Annotated[
-        Optional[str],
-        Field(
-            None,
-            min_length=5,
-            max_length=20,
-            description="Updated registration number"
-        )
-    ]
-    mileage_km: Annotated[
-        Optional[int],
-        Field(
-            None,
-            ge=0,
-            description="Updated mileage in kilometers"
-        )
-    ]
-    is_primary: Annotated[
-        Optional[bool],
-        Field(
-            None,
-            description="Updated primary vehicle status"
-        )
-    ]
-    is_active: Annotated[
-        Optional[bool],
-        Field(
-            None,
-            description="Updated active status"
-        )
-    ]
+    model: Annotated[Optional[str], Field(None, min_length=2, max_length=50)]
+    brand: Annotated[Optional[str], Field(None, min_length=2, max_length=50)]
+    year: Annotated[Optional[int], Field(None, ge=1886, le=datetime.now().year + 1)]
+    category: Annotated[Optional[VehicleCategory], Field(None)]
+    sub_type: Annotated[Optional[str], Field(None)]
+    fuel_type: Annotated[Optional[FuelType], Field(None)]
+    transmission: Annotated[Optional[TransmissionType], Field(None)]
+    history: Annotated[Optional[str], Field(None, max_length=2000)]
+    images: Annotated[Optional[List[str]], Field(None, max_length=10)]
+    registration_number: Annotated[Optional[str], Field(None, min_length=5, max_length=20)]
+    mileage_km: Annotated[Optional[int], Field(None, ge=0)]
+    is_primary: Annotated[Optional[bool], Field(None)]
+    is_active: Annotated[Optional[bool], Field(None)]
+
     @field_validator('year')
     @classmethod
     def validate_year(cls, v: Optional[int]) -> Optional[int]:
-        return cls._validate_year(v) 
+        return cls._validate_year(v)
+
     @model_validator(mode='after')
     def validate_update(self) -> 'VehicleUpdate':
         """Ensure updates maintain data consistency."""
         if self.mileage_km is not None and self.mileage_km > 500000:
             raise ValueError("Mileage seems unusually high, please verify")
-            
-        if self.type is not None and self.type == VehicleType.BIKE and self.transmission == TransmissionType.AUTOMATIC:
-            raise ValueError("Bikes typically don't have automatic transmissions")
+        
+        if self.category == VehicleCategory.MOTORCYCLE and self.transmission == TransmissionType.AUTOMATIC:
+            raise ValueError("Motorcycles typically don't have automatic transmissions")
+        
+        if self.transmission == TransmissionType.DIRECT_DRIVE and self.fuel_type != FuelType.ELECTRIC:
+            raise ValueError("Direct drive transmission is only for electric vehicles")
             
         return self
 
@@ -529,30 +459,12 @@ class VehicleUpdate(BaseVehicleModel):
 
 from models.user import UserOut
 
+
 class VehicleWithOwnerOut(VehicleIn):
     """Output model for vehicle information with owner details (admin only)."""
-    id: Annotated[
-        PyObjectId,
-        Field(
-            ...,
-            alias="_id",
-            description="Unique vehicle identifier"
-        )
-    ]
-    created_at: Annotated[
-        datetime,
-        Field(
-            ...,
-            description="Timestamp when vehicle was added"
-        )
-    ]
-    images: Annotated[  # Added images field
-        List[str],
-        Field(
-            description="List of image URLs for the vehicle",
-            examples=[["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"]]
-        )
-    ]
+    id: Annotated[PyObjectId, Field(..., alias="_id")]
+    created_at: Annotated[datetime, Field(...)]
+    images: Annotated[List[str], Field(...)]
     owner: UserOut
 
     @computed_field
@@ -568,55 +480,14 @@ class VehicleWithOwnerOut(VehicleIn):
             parts.append(str(self.year))
         return " ".join(parts) if parts else "Unnamed Vehicle"
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_encoders={ObjectId: str},
-        json_schema_extra={
-            "example": {
-                "_id": "507f1f77bcf86cd799439011",
-                "user_id": "507f1f77bcf86cd799439012",
-                "model": "Corolla",
-                "brand": "Toyota",
-                "year": 2020,
-                "created_at": "2023-01-01T00:00:00Z",
-                "display_name": "Toyota Corolla 2020",
-                "images": ["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"], # Example images
-                "owner": {
-                    "_id": "507f1f77bcf86cd799439012",
-                    "first_name": "John",
-                    "last_name": "Doe",
-                    "email": "john.doe@example.com",
-                    "profile_picture": "https://example.com/profile.jpg",
-                    "phone_number": "+1234567890",
-                    "initials": "JD"
-                }
-            }
-        }
-    )
+    model_config = ConfigDict(from_attributes=True, json_encoders={ObjectId: str})
+
+
 class VehicleOut(VehicleIn):
     """Output model for vehicle information."""
-    id: Annotated[
-        PyObjectId,
-        Field(
-            ...,
-            alias="_id",
-            description="Unique vehicle identifier"
-        )
-    ]
-    created_at: Annotated[
-        datetime,
-        Field(
-            ...,
-            description="Timestamp when vehicle was added"
-        )
-    ]
-    images: Annotated[  # Added images field
-        List[str],
-        Field(
-            description="List of image URLs for the vehicle",
-            examples=[["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"]]
-        )
-    ]
+    id: Annotated[PyObjectId, Field(..., alias="_id")]
+    created_at: Annotated[datetime, Field(...)]
+    images: Annotated[List[str], Field(...)]
 
     @computed_field
     @property
@@ -631,136 +502,31 @@ class VehicleOut(VehicleIn):
             parts.append(str(self.year))
         return " ".join(parts) if parts else "Unnamed Vehicle"
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_encoders={ObjectId: str},
-        json_schema_extra={
-            "example": {
-                "_id": "507f1f77bcf86cd799439011",
-                "user_id": "507f1f77bcf86cd799439012",
-                "model": "Corolla",
-                "brand": "Toyota",
-                "year": 2020,
-                "created_at": "2023-01-01T00:00:00Z",
-                "display_name": "Toyota Corolla 2020",
-                "images": ["https://example.com/vehicle1.jpg", "https://example.com/vehicle2.jpg"] # Example images
-            }
-        }
-    )
+    model_config = ConfigDict(from_attributes=True, json_encoders={ObjectId: str})
+
 
 class VehicleSearch(BaseModel):
     """Model for searching/filtering vehicles."""
-    user_id: Annotated[
-        Optional[PyObjectId],
-        Field(
-            None,
-            description="Filter by owner user ID"
-        )
-    ]
-    brand: Annotated[
-        Optional[str],
-        Field(
-            None,
-            min_length=2,
-            description="Filter by vehicle brand"
-        )
-    ]
-    model: Annotated[
-        Optional[str],
-        Field(
-            None,
-            min_length=2,
-            description="Filter by vehicle model"
-        )
-    ]
-    type: Annotated[
-        Optional[VehicleType],
-        Field(
-            None,
-            description="Filter by vehicle type"
-        )
-    ]
-    fuel_type: Annotated[
-        Optional[FuelType],
-        Field(
-            None,
-            description="Filter by fuel type"
-        )
-    ]
-    transmission: Annotated[
-        Optional[TransmissionType],
-        Field(
-            None,
-            description="Filter by transmission type"
-        )
-    ]
-    year_from: Annotated[
-        Optional[int],
-        Field(
-            None,
-            ge=1886,
-            description="Filter by minimum manufacturing year"
-        )
-    ]
-    year_to: Annotated[
-        Optional[int],
-        Field(
-            None,
-            le=datetime.now().year + 1,
-            description="Filter by maximum manufacturing year"
-        )
-    ]
-    is_primary: Annotated[
-        Optional[bool],
-        Field(
-            None,
-            description="Filter by primary vehicle status"
-        )
-    ]
-    is_active: Annotated[
-        Optional[bool],
-        Field(
-            True,
-            description="Filter by active status"
-        )
-    ]
-    mileage_min: Annotated[
-        Optional[int],
-        Field(
-            None,
-            ge=0,
-            description="Filter by minimum mileage"
-        )
-    ]
-    mileage_max: Annotated[
-        Optional[int],
-        Field(
-            None,
-            ge=0,
-            description="Filter by maximum mileage"
-        )
-    ]
+    brand: Annotated[Optional[str], Field(None, min_length=2, description="Filter by vehicle brand")]
+    model: Annotated[Optional[str], Field(None, min_length=2, description="Filter by vehicle model")]
+    category: Annotated[Optional[str], Field(None, description="Filter by vehicle category (motorcycle or car)")]
+    sub_type: Annotated[Optional[str], Field(None, description="Filter by vehicle sub-type")]
+    fuel_type: Annotated[Optional[str], Field(None, description="Filter by fuel type")]
+    transmission: Annotated[Optional[str], Field(None, description="Filter by transmission type")]
+    year_from: Annotated[Optional[int], Field(None, ge=1886, description="Filter by minimum manufacturing year")]
+    year_to: Annotated[Optional[int], Field(None, le=datetime.now().year + 1, description="Filter by maximum manufacturing year")]
+    is_primary: Annotated[Optional[bool], Field(None, description="Filter by primary vehicle status")]
+    is_active: Annotated[Optional[bool], Field(None, description="Filter by active status (None = no filter, True = active only, False = inactive only)")]
+    mileage_min: Annotated[Optional[int], Field(None, ge=0, description="Filter by minimum mileage")]
+    mileage_max: Annotated[Optional[int], Field(None, ge=0, description="Filter by maximum mileage")]
 
     @model_validator(mode='after')
     def validate_search_params(self) -> 'VehicleSearch':
         """Validate search parameter combinations."""
         if self.year_from is not None and self.year_to is not None and self.year_from > self.year_to:
             raise ValueError("year_from cannot be greater than year_to")
-            
         if self.mileage_min is not None and self.mileage_max is not None and self.mileage_min > self.mileage_max:
             raise ValueError("mileage_min cannot be greater than mileage_max")
-            
         return self
 
-    model_config = ConfigDict(
-        json_encoders={ObjectId: str},
-        json_schema_extra={
-            "example": {
-                "brand": "Toyota",
-                "type": "car",
-                "year_from": 2015,
-                "year_to": 2020,
-                "mileage_max": 100000
-            }
-        }
-    )
+    model_config = ConfigDict(json_encoders={ObjectId: str})
