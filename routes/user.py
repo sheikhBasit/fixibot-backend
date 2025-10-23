@@ -471,9 +471,24 @@ async def update_user_me(
     current_user: UserInDB = Depends(get_current_user),
 ) -> UserOut:
     """
-    Update current user's profile.
+    Update current user's profile. At least one field or profile picture must be provided.
+    All fields are optional, allowing for partial updates.
     """
-    # Convert empty strings to None before validation
+    # Initialize update dictionary
+    update_dict = {}
+    
+    # Handle profile picture first if provided
+    if profile_picture:
+        try:
+            image_url = await upload_image(profile_picture, expected_type='user')
+            update_dict["profile_picture"] = image_url
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error uploading profile picture: {str(e)}"
+            )
+    
+    # Convert empty strings to None and process other fields
     def clean_form_value(value):
         """Convert empty/placeholder values to None."""
         if value is None:
@@ -484,20 +499,68 @@ async def update_user_me(
                 return None
         return value
     
-    # Clean form values
-    cleaned_first_name = clean_form_value(first_name)
-    cleaned_last_name = clean_form_value(last_name)
-    cleaned_email = clean_form_value(email)
-    cleaned_phone_number = clean_form_value(phone_number)
+    # Process text fields only if they have actual values
+    field_updates = {
+        "first_name": clean_form_value(first_name),
+        "last_name": clean_form_value(last_name),
+        "email": clean_form_value(email),
+        "phone_number": clean_form_value(phone_number)
+    }
     
-    # Validate input using UpdateUser model
-    update_data = UpdateUser(
-        first_name=cleaned_first_name,
-        last_name=cleaned_last_name,
-        email=cleaned_email,
-        phone_number=cleaned_phone_number,
-        profile_picture=None  # Will handle file separately
-    )
+    # Add non-None values to update_dict
+    for field, value in field_updates.items():
+        if value is not None:
+            update_dict[field] = value
+    
+    # If no updates provided at all (no fields and no profile picture)
+    if not update_dict:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field must be provided for update"
+        )
+    
+    # Handle email validation if provided
+    if "email" in update_dict:
+        update_dict["email"] = update_dict["email"].lower()
+        existing_email_user = await db.users_collection.find_one({
+            "email": update_dict["email"],
+            "_id": {"$ne": current_user.id}
+        })
+        if existing_email_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email address already in use by another account"
+            )
+
+    # Handle phone number validation if provided
+    if "phone_number" in update_dict:
+        existing_phone_user = await db.users_collection.find_one({
+            "phone_number": update_dict["phone_number"],
+            "_id": {"$ne": current_user.id}
+        })
+        if existing_phone_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already in use by another account"
+            )
+
+    # Add updated_at timestamp
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+
+    try:
+        # Update user in database
+        updated_user = await UserService.update_user(str(current_user.id), update_dict)
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        return updated_user
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating user: {str(e)}"
+        )
     
     update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
     
