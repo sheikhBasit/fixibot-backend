@@ -342,40 +342,75 @@ class VehicleService:
         limit: int = 100,
         sort_by: str = "created_at",
         sort_order: str = "desc"
-    ) -> List[VehicleWithOwnerOut]:
-        """Admin: Get all vehicles with owner info."""
+    ) -> List['VehicleWithOwnerOut']: # Use string forward-ref if model isn't imported
+        """Admin: Get all vehicles with owner info using an efficient $lookup."""
         try:
             sort_direction = DESCENDING if sort_order == "desc" else 1
-            vehicles_cursor = db.vehicles_collection.find({}) \
-                .sort(sort_by, sort_direction) \
-                .skip(skip).limit(limit)
-            vehicles = await vehicles_cursor.to_list(length=limit)
-            
-            # Convert ObjectIds to strings
-            for vehicle in vehicles:
-                if "_id" in vehicle and isinstance(vehicle["_id"], ObjectId):
-                    vehicle["_id"] = str(vehicle["_id"])
-                if "user_id" in vehicle and isinstance(vehicle["user_id"], ObjectId):
-                    vehicle["user_id"] = str(vehicle["user_id"])
-            
-            user_ids = list({v["user_id"] for v in vehicles if v.get("user_id")})
-            users = {
-                u["_id"]: u
-                for u in await db.users_collection.find({"_id": {"$in": user_ids}}).to_list(length=len(user_ids))
-            }
-            
-            result = []
-            for v in vehicles:
-                owner = users.get(v["user_id"])
-                if owner and isinstance(owner.get("_id"), ObjectId):
-                    owner = {**owner, "_id": str(owner["_id"])}
-                v["owner"] = UserOut(**owner) if owner else None
-                result.append(VehicleWithOwnerOut(**v))
+
+            # 1. Define the aggregation pipeline
+            pipeline = [
+                # Sort, skip, and limit first for performance
+                { "$sort": { sort_by: sort_direction } },
+                { "$skip": skip },
+                { "$limit": limit },
                 
-            logger.info(f"Admin retrieved {len(result)} vehicles with owner info")
+                # 2. Perform the "left join" to the users collection
+                {
+                    "$lookup": {
+                        "from": db.users_collection.name,
+                        "localField": "user_id",
+                        "foreignField": "_id",
+                        "as": "owner"
+                    }
+                },
+                
+                # 3. Unwind the "owner" array
+                {
+                    "$unwind": {
+                        "path": "$owner",
+                        "preserveNullAndEmptyArrays": True # Keep vehicles with no owner
+                    }
+                },
+
+                # 4. --- THIS IS THE FIX ---
+                # Convert owner._id to string so it matches the Pydantic model (UserOut)
+                # which expects a string, not an ObjectId.
+                {
+                    "$addFields": {
+                        "owner": {
+                            # Check if owner is null (from preserveNullAndEmptyArrays)
+                            "$cond": {
+                                "if": { "$eq": [ "$owner", None ] },
+                                "then": None, # If null, keep it null
+                                "else": {
+                                    # Otherwise, merge the existing owner object
+                                    # with a new '_id' field that is a string.
+                                    "$mergeObjects": [
+                                        "$owner",
+                                        { "_id": { "$toString": "$owner._id" } }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+
+            # 5. Execute the aggregation
+            cursor = db.vehicles_collection.aggregate(pipeline)
+            
+            # 6. Convert results to a list of dicts
+            vehicle_docs = await cursor.to_list(length=limit)
+            
+            # 7. Pydantic validates and parses. This will now succeed.
+            result = [VehicleWithOwnerOut(**v) for v in vehicle_docs]
+
+            logger.info(f"Admin retrieved {len(result)} vehicles with owner info via $lookup")
             return result
+            
         except Exception as e:
-            logger.error(f"Admin vehicle retrieval with owner failed: {e}")
+            # Add exc_info=True to get the full stack trace for easier debugging
+            logger.error(f"Admin vehicle retrieval with owner failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error retrieving vehicles with owner info")
 
     @staticmethod

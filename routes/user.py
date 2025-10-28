@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta, datetime, timezone
 from typing import   List, Optional, Union
-from models.user import AdminUserOut, GoogleSignInRequest, UpdateUser, UserCreate, UserInDB, UserOut, Token, UserRole, VerifyOTPRequest
+from models.user import AdminUserOut, GoogleSignIn, UserBase, LoginResponse,UpdateUser, UserCreate, UserInDB, UserOut, Token, UserRole, VerifyOTPRequest
 from services.users import UserService
 from database import db
 from services.mail import send_password_reset_email, send_verification_email
@@ -13,7 +13,9 @@ from utils.auth import  create_access_token
 from utils.py_object import PyObjectId
 from utils.user import get_current_user
 from google.oauth2 import id_token
-from google.auth.transport import requests
+from google.auth.transport import requests as google_requests
+import asyncio
+from asyncio.log import logger
 router = APIRouter(prefix="/auth", tags=['Users'])
 
 @router.post("/register", response_model=UserOut)
@@ -613,56 +615,120 @@ async def update_user_me(
 
 
 
-@router.post("/google")
-async def google_login(payload: GoogleSignInRequest):
-    """Login or Register user using Google OAuth token."""
+@router.post("/google", response_model=LoginResponse)
+async def google_login(payload: GoogleSignIn):
+    """
+    Handles Google Sign-In.
+    Receives a Google ID token, verifies it, finds or creates a user,
+    and returns the application's own JWT and user data.
+    """
     try:
-        # Verify token with Google
-        idinfo = id_token.verify_oauth2_token(payload.token, requests.Request(), settings.GOOGLE_CLIENT_ID)
+        # Run the blocking I/O call in a separate thread
+        idinfo = await asyncio.to_thread(
+            id_token.verify_oauth2_token,
+            payload.token,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID
+        )
 
         email = idinfo.get("email")
+        if not email:
+            logger.warning("Google token verified but email was missing.")
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid Google token: Email not found."
+            )
+
+        # Get user info from Google
         first_name = idinfo.get("given_name", "")
         last_name = idinfo.get("family_name", "")
-        picture = idinfo.get("picture", "")
+        # Use 'picture or None' to handle empty strings
+        picture = idinfo.get("picture") or None
 
-        if not email:
-            raise HTTPException(status_code=400, detail="Invalid Google token")
+        # Check if user already exists
+        user_doc = await db.users_collection.find_one({"email": email})
+        
+        if user_doc:
+            # --- USER EXISTS ---
+            user = UserInDB(**user_doc)
+            
+            # Check if name or picture needs updating
+            update_fields = {}
+            if user.first_name != first_name and first_name:
+                update_fields["first_name"] = first_name
+            if user.last_name != last_name and last_name:
+                update_fields["last_name"] = last_name
+            if user.profile_picture != picture:
+                update_fields["profile_picture"] = picture
+                
+            if update_fields:
+                logger.info(f"Updating profile for existing user: {email}")
+                update_fields["updated_at"] = datetime.now(timezone.utc)
+                await db.users_collection.update_one(
+                    {"_id": user.id},
+                    {"$set": update_fields}
+                )
+                # Update local model instance
+                user = user.model_copy(update=update_fields)
 
-        # Check if user exists
-        user: Optional[UserInDB] = await UserService.get_user_by_email(email)
+        else:
+            # --- CREATE NEW USER ---
+            logger.info(f"New user signing up via Google: {email}")
+            
+            # 1. Create the base data using your UserBase model
+            user_base_data = UserBase(
+                first_name=first_name or "Google",
+                last_name=last_name or "User",
+                email=email,
+                profile_picture=picture,
+                is_verified=True,  # Google verified this email
+            )
+            
+            # 2. Create the full UserInDB object.
+            # This runs default factories for created_at, updated_at, and id.
+            user = UserInDB(
+                **user_base_data.model_dump(),
+                hashed_password=None  # Use None for social login
+            )
 
-        # If not exists, create new user
-        if not user:
-            user_data = {
-                "first_name": first_name or "Google",
-                "last_name": last_name or "User",
-                "email": email,
-                "phone_number": None,
-                "profile_picture": picture,
-                "role": "user",
-                "is_active": True,
-                "is_verified": True,  # Mark verified since Google already verified email
-                "password": None  # No password for social login
-            }
-            user = await UserService.create_user_from_google(user_data)
+            # 3. Dump to dict for MongoDB, using aliases (so 'id' becomes '_id')
+            user_doc_to_insert = user.model_dump(by_alias=True)
+            
+            # 4. Insert the document
+            await db.users_collection.insert_one(user_doc_to_insert)
+            # The 'user' object is already complete and correct
 
-        # Generate JWT token for your app
+        # --- TOKEN CREATION & RESPONSE ---
+        
+        # Generate JWT token for our app
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_DAYS)
-        token = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
+        token_str = create_access_token(
+            data={"sub": str(user.id)}, # 'sub' is standard for user ID
+            expires_delta=access_token_expires
+        )
 
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "expires_in": access_token_expires.total_seconds(),
-            "user": {
-                "_id": str(user.id),
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "profile_picture": user.profile_picture
-            }
-        }
+        # Create the UserOut model from the UserInDB model
+        # This works because UserOut has model_config(from_attributes=True)
+        user_out_data = UserOut.model_validate(user)
 
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid Google token")
+        # Return the successful response
+        return LoginResponse(
+            access_token=token_str,
+            token_type="bearer",
+            expires_in=int(access_token_expires.total_seconds()),
+            user=user_out_data
+        )
 
+    except ValueError as e:
+        # This catches errors from id_token.verify_oauth2_token
+        logger.error(f"Invalid Google token: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=400, # Corrected from 4.00
+            detail="Invalid Google token"
+        )
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during Google login: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal server error"
+        )

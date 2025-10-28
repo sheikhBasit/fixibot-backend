@@ -114,7 +114,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Model for creating new users with password validation."""
     password: Annotated[
-        str,
+        Optional[str],
         Field(
             ...,
             min_length=8,
@@ -165,7 +165,7 @@ class UserInDB(UserBase):
         )
     ]
     hashed_password: Annotated[
-        str,
+        Optional[str],
         Field(
             ...,
             description="Hashed password for security"
@@ -276,7 +276,8 @@ class UserInDB(UserBase):
 class UserOut(BaseModel):
     """Output model for user data (safe for public exposure)."""
     id: Annotated[
-        str,
+        # str,
+        PyObjectId,
         Field(
             ...,
             alias="_id",
@@ -329,6 +330,10 @@ class UserOut(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
         populate_by_name=True,
+        json_encoders={
+            ObjectId: str,
+            PyObjectId: str
+        },
         json_schema_extra={
             "description": "Public user profile information",
             "example": {
@@ -511,7 +516,8 @@ class VerifyOTPRequest(BaseModel):
 class AdminUserOut(BaseModel):
     """Output model for admin user data."""
     id: Annotated[
-        str,
+        PyObjectId,
+                # str,
         Field(
             ...,
             alias="_id",
@@ -604,5 +610,34 @@ class AdminUserOut(BaseModel):
         }
     )
 
-class GoogleSignInRequest(BaseModel):
+class GoogleSignIn(BaseModel):
     token: str
+
+
+# ... other models ...
+
+class LoginResponse(Token):
+    """
+    Response model for successful login, including token and public user details.
+    """
+    user: UserOut
+
+    model_config = ConfigDict(
+        # --- THIS IS THE FIX ---
+        # Add the encoders here so the top-level response
+        # knows how to serialize the nested ObjectId.
+        json_encoders={
+            ObjectId: str,
+            PyObjectId: str
+        },
+        # -----------------------
+        
+        json_schema_extra={
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "user": UserOut.model_config["json_schema_extra"]["example"]
+            }
+        }
+    )

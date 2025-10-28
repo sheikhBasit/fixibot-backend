@@ -9,8 +9,9 @@ from pydantic import (
 )
 from bson import ObjectId
 from datetime import datetime, timezone
-from utils.py_object import PyObjectId
+from utils.py_object import PyObjectId  # Assuming this import path
 from enum import Enum
+from models.user import UserOut # Assuming this import path
 
 
 class VehicleCategory(str, Enum):
@@ -253,7 +254,11 @@ class VehicleModel(BaseVehicleModel):
 
     @model_validator(mode='after')
     def validate_vehicle_properties(self) -> 'VehicleModel':
-        """Validate logical relationships between vehicle properties."""
+        """
+        Validate logical relationships for data consistency.
+        This validator runs on read, so it should NOT contain
+        strict business logic, only data integrity checks.
+        """
         # Validate sub_type matches category
         if self.category == VehicleCategory.MOTORCYCLE:
             if self.sub_type and self.sub_type not in [e.value for e in MotorcycleSubType]:
@@ -262,18 +267,9 @@ class VehicleModel(BaseVehicleModel):
             if self.sub_type and self.sub_type not in [e.value for e in CarSubType]:
                 raise ValueError(f"Invalid car sub-type: {self.sub_type}")
         
-        # Transmission validation
-        if self.category == VehicleCategory.MOTORCYCLE and self.transmission == TransmissionType.AUTOMATIC:
-            raise ValueError("Motorcycles typically don't have automatic transmissions")
-        
-        # Fuel type requirements
-        motorized_categories = [VehicleCategory.MOTORCYCLE, VehicleCategory.CAR]
-        if self.category in motorized_categories and self.fuel_type is None:
-            raise ValueError("Motorized vehicles must specify fuel type")
-        
-        # Direct drive only for electric vehicles
-        if self.transmission == TransmissionType.DIRECT_DRIVE and self.fuel_type != FuelType.ELECTRIC:
-            raise ValueError("Direct drive transmission is only for electric vehicles")
+        # --- REMOVED STRICT VALIDATION FROM HERE ---
+        # The checks for 'Motorcycle + automatic' and 'fuel_type required'
+        # have been moved to VehicleIn and VehicleUpdate.
             
         return self
 
@@ -374,6 +370,7 @@ class VehicleIn(BaseVehicleModel):
     @model_validator(mode='after')
     def validate_new_vehicle(self) -> 'VehicleIn':
         """Additional validations for new vehicle creation."""
+        # Sub-type check
         if self.category == VehicleCategory.MOTORCYCLE:
             if self.sub_type and self.sub_type not in [e.value for e in MotorcycleSubType]:
                 raise ValueError(f"Invalid motorcycle sub-type: {self.sub_type}")
@@ -381,6 +378,7 @@ class VehicleIn(BaseVehicleModel):
             if self.sub_type and self.sub_type not in [e.value for e in CarSubType]:
                 raise ValueError(f"Invalid car sub-type: {self.sub_type}")
         
+        # --- MOVED STRICT VALIDATION HERE ---
         if self.fuel_type is None:
             raise ValueError("Fuel type is required")
         
@@ -389,6 +387,14 @@ class VehicleIn(BaseVehicleModel):
             
         if self.mileage_km > 500000:
             raise ValueError("Mileage seems unusually high, please verify")
+        
+        # Transmission validation
+        if self.category == VehicleCategory.MOTORCYCLE and self.transmission == TransmissionType.AUTOMATIC:
+            raise ValueError("Motorcycles typically don't have automatic transmissions")
+
+        # Direct drive only for electric vehicles
+        if self.transmission == TransmissionType.DIRECT_DRIVE and self.fuel_type != FuelType.ELECTRIC:
+            raise ValueError("Direct drive transmission is only for electric vehicles")
             
         return self
 
@@ -437,6 +443,7 @@ class VehicleUpdate(BaseVehicleModel):
         if self.mileage_km is not None and self.mileage_km > 500000:
             raise ValueError("Mileage seems unusually high, please verify")
         
+        # This logic is fine here, as it's validating an *update*
         if self.category == VehicleCategory.MOTORCYCLE and self.transmission == TransmissionType.AUTOMATIC:
             raise ValueError("Motorcycles typically don't have automatic transmissions")
         
@@ -457,15 +464,50 @@ class VehicleUpdate(BaseVehicleModel):
     )
 
 
-from models.user import UserOut
+class VehicleWithOwnerOut(VehicleModel):
+    """
+    Output model for vehicle information with owner details (admin only).
+    
+    This class correctly inherits from 'VehicleModel'.
+    """
+    
+    # We inherit ALL fields from VehicleModel (id, user_id, model,
+    # brand, year, created_at, images, etc.)
+    
+    # We only need to add the new 'owner' field that our $lookup aggregation creates.
+    owner: Optional[UserOut] = None
 
+    # We also add the 'display_name' computed_field which is specific
+    # to our output models.
+    @computed_field
+    @property
+    def display_name(self) -> str:
+        """Generate a display-friendly vehicle name."""
+        parts = []
+        if self.brand:
+            parts.append(self.brand)
+        if self.model:
+            parts.append(self.model)
+        if self.year:
+            parts.append(str(self.year))
+        return " ".join(parts) if parts else "Unnamed Vehicle"
 
-class VehicleWithOwnerOut(VehicleIn):
-    """Output model for vehicle information with owner details (admin only)."""
-    id: Annotated[PyObjectId, Field(..., alias="_id")]
-    created_at: Annotated[datetime, Field(...)]
-    images: Annotated[List[str], Field(...)]
-    owner: UserOut
+    model_config = ConfigDict(
+        from_attributes=True, 
+        # This assumes 'from_attributes=True'
+        json_encoders={ObjectId: str}
+    )
+
+class VehicleOut(VehicleModel): # <-- FIXED: Inherits from VehicleModel
+    """
+    Output model for vehicle information.
+    
+    FIXED: This now inherits from 'VehicleModel' instead of 'VehicleIn'
+    to avoid running strict input validators on read operations.
+    """
+    
+    # Inherits all fields from VehicleModel.
+    # We just add the computed_field for display_name.
 
     @computed_field
     @property
@@ -480,29 +522,10 @@ class VehicleWithOwnerOut(VehicleIn):
             parts.append(str(self.year))
         return " ".join(parts) if parts else "Unnamed Vehicle"
 
-    model_config = ConfigDict(from_attributes=True, json_encoders={ObjectId: str})
-
-
-class VehicleOut(VehicleIn):
-    """Output model for vehicle information."""
-    id: Annotated[PyObjectId, Field(..., alias="_id")]
-    created_at: Annotated[datetime, Field(...)]
-    images: Annotated[List[str], Field(...)]
-
-    @computed_field
-    @property
-    def display_name(self) -> str:
-        """Generate a display-friendly vehicle name."""
-        parts = []
-        if self.brand:
-            parts.append(self.brand)
-        if self.model:
-            parts.append(self.model)
-        if self.year:
-            parts.append(str(self.year))
-        return " ".join(parts) if parts else "Unnamed Vehicle"
-
-    model_config = ConfigDict(from_attributes=True, json_encoders={ObjectId: str})
+    model_config = ConfigDict(
+        from_attributes=True, 
+        json_encoders={ObjectId: str}
+    )
 
 
 class VehicleSearch(BaseModel):
@@ -530,3 +553,4 @@ class VehicleSearch(BaseModel):
         return self
 
     model_config = ConfigDict(json_encoders={ObjectId: str})
+
