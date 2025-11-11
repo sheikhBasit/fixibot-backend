@@ -27,9 +27,17 @@ class TestDataGenerator:
     
     @staticmethod
     def create_sample_test_data() -> List[EvaluationData]:
-        """Create sample test data for initial testing"""
+        """
+        Create sample test data for initial testing.
         
-        test_cases = [
+        This now includes:
+        1. In-Domain (Related): Real-life questions related to the bot's purpose (vehicles).
+        2. Out-of-Domain (Not Related): Questions the bot should gracefully decline.
+        3. Chit-Chat: Simple greetings to test conversational robustness.
+        """
+        
+        # 1. In-Domain (Related) Test Cases
+        in_domain_cases = [
             {
                 "query_id": "test_001",
                 "query_text": "Why is my car engine overheating?",
@@ -87,6 +95,55 @@ class TestDataGenerator:
             }
         ]
         
+        # --- NEWLY ADDED ---
+        # 2. Out-of-Domain (Not Related) Test Cases
+        #    These test if the bot correctly identifies and declines to answer
+        #    questions outside its expertise.
+        out_of_domain_cases = [
+            {
+                "query_id": "ood_001",
+                "query_text": "How do I bake a chocolate cake?",
+                "retrieved_doc_ids": [], # Ideally, no relevant docs are retrieved
+                "relevant_doc_ids": [],
+                "similarity_scores": [],
+                "generated_text": "I'm sorry, I am a vehicle assistant and cannot help with cooking recipes.", # This is a good, expected response
+                "reference_text": "I am unable to provide information on that topic. I can only assist with vehicle-related questions.", # This is the "ground truth" refusal
+                "start_time": time.time(),
+                "end_time": time.time() + 1.1
+            },
+            {
+                "query_id": "ood_002",
+                "query_text": "What is the capital of France?",
+                "retrieved_doc_ids": [], # It's possible a spurious doc is retrieved, e.g., about "French cars"
+                "relevant_doc_ids": [], # But no doc is *actually* relevant
+                "similarity_scores": [],
+                "generated_text": "My apologies, but that question is outside of my expertise. I specialize in vehicle maintenance and repair.",
+                "reference_text": "I do not have information about geography. My purpose is to help with vehicle questions.",
+                "start_time": time.time(),
+                "end_time": time.time() + 1.3
+            }
+        ]
+
+        # 3. Chit-Chat Test Cases
+        #    These test basic conversational ability.
+        chit_chat_cases = [
+            {
+                "query_id": "chat_001",
+                "query_text": "Hello, how are you?",
+                "retrieved_doc_ids": [],
+                "relevant_doc_ids": [],
+                "similarity_scores": [],
+                "generated_text": "Hello! I'm a bot, but I'm ready to help with your vehicle questions.",
+                "reference_text": "Hello! How can I assist you with your vehicle today?",
+                "start_time": time.time(),
+                "end_time": time.time() + 0.9
+            }
+        ]
+        
+        # Combine all test cases
+        test_cases = in_domain_cases + out_of_domain_cases + chit_chat_cases
+        # --- END OF MODIFICATIONS ---
+        
         return [EvaluationData(**case) for case in test_cases]
     
     @staticmethod
@@ -115,6 +172,20 @@ class TestDataGenerator:
                     "vehicle_type": "car",
                     "issue_category": "engine"
                 }
+            },
+            {
+                "query_id": "ood_001",
+                "query_text": "An out-of-domain query here",
+                "retrieved_doc_ids": [],
+                "relevant_doc_ids": [],
+                "similarity_scores": [],
+                "generated_text": "The bot's (hopefully) polite refusal",
+                "reference_text": "The ideal ground-truth refusal",
+                "start_time": 1234567892.0,
+                "end_time": 1234567893.5,
+                "metadata": {
+                    "category": "out_of_domain"
+                }
             }
         ]
         
@@ -135,9 +206,10 @@ async def run_basic_test():
     print()
     
     # Generate test data
-    print("Loading test data...")
+    print("Loading test data (in-domain and out-of-domain)...")
     test_data = TestDataGenerator.create_sample_test_data()
-    print(f"✅ Loaded {len(test_data)} test cases")
+    total_cases = len(test_data) # <--- MODIFICATION
+    print(f"✅ Loaded {total_cases} test cases")
     print()
     
     # Initialize evaluator
@@ -145,11 +217,21 @@ async def run_basic_test():
     
     # Run evaluation
     print("Running evaluation...")
+    # --- MODIFICATION START ---
+    print(f"Processing {total_cases} cases. This may take a moment as it runs in a single batch...")
+    start_eval_time = time.time()
+    # --- MODIFICATION END ---
+    
     results_df = evaluator.evaluate(
         test_data, 
         k_values=[1, 3, 5],
         calculate_bertscore=False  # Set to True if you have bert-score installed
     )
+    
+    # --- MODIFICATION START ---
+    end_eval_time = time.time()
+    print(f"✅ Evaluation complete in {end_eval_time - start_eval_time:.2f} seconds.")
+    # --- MODIFICATION END ---
     
     # Display results
     print()
@@ -194,10 +276,11 @@ async def run_comprehensive_test(test_data_file: str = None):
         print(f"Loading test data from {test_data_file}...")
         test_data = TestDataGenerator.load_from_json(test_data_file)
     else:
-        print("Using sample test data...")
+        print("Using sample test data (in-domain and out-of-domain)...")
         test_data = TestDataGenerator.create_sample_test_data()
     
-    print(f"✅ Loaded {len(test_data)} test cases")
+    total_cases = len(test_data) # <--- MODIFICATION
+    print(f"✅ Loaded {total_cases} test cases")
     print()
     
     # Initialize evaluator
@@ -205,6 +288,10 @@ async def run_comprehensive_test(test_data_file: str = None):
     
     # Run evaluation
     print("Running comprehensive evaluation...")
+    # --- MODIFICATION START ---
+    print(f"Processing {total_cases} cases. This may take a moment as it runs in a single batch...")
+    start_eval_time = time.time()
+    # --- MODIFICATION END ---
     print()
     
     results_df = evaluator.evaluate(
@@ -212,6 +299,11 @@ async def run_comprehensive_test(test_data_file: str = None):
         k_values=[1, 3, 5],
         calculate_bertscore=False  # Set to True if you want BERTScore
     )
+    
+    # --- MODIFICATION START ---
+    end_eval_time = time.time()
+    print(f"✅ Evaluation complete in {end_eval_time - start_eval_time:.2f} seconds.")
+    # --- MODIFICATION END ---
     
     # Detailed results
     print()

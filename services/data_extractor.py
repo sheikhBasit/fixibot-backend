@@ -21,19 +21,36 @@ if str(project_root) not in sys.path:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Test queries for evaluation
-TEST_QUERIES = [
-    "What should I do if my car won't start?",
-    "How do I check my car's oil level?",
-    "What does it mean when my brake pedal feels spongy?",
-    "My car is making a squealing noise when I brake, what could be wrong?",
-    "What are common causes of engine overheating?",
-    "How often should I rotate my tires?",
-    "What should I do if my car battery dies?",
-    "Why is my check engine light on?",
-    "How do I know if I need new brake pads?",
-    "What's causing my steering wheel to shake?"
+# --- "CORRECT ANSWERS" ARE NOW FILLED IN ---
+# These are the "ground truth" reference texts.
+TEST_DATA = [
+    {
+        "query": "What should I do if my car won't start?",
+        "reference_text": "If your car won't start, the most common causes are a dead battery, a faulty starter, or an empty fuel tank. First, check if your headlights and interior lights work; if they are dim or dead, your battery is likely the issue. You can try jump-starting it."
+    },
+    {
+        "query": "How do I check my car's oil level?",
+        "reference_text": "To check your oil level, park the car on level ground and wait for the engine to cool down. Pull out the dipstick, wipe it clean with a rag, insert it all the way back in, and then pull it out again. The oil level should be between the 'Full' and 'Add' (or 'F' and 'L') marks."
+    },
+    {
+        "query": "What does it mean when my brake pedal feels spongy?",
+        "reference_text": "A spongy or 'mushy' brake pedal is a serious safety concern, usually indicating air in the brake lines. This can be caused by a brake fluid leak or a failing master cylinder. The system needs to be inspected and 'bled' to remove the air."
+    },
+    {
+        "query": "My car is making a squealing noise when I brake, what could be wrong?",
+        "reference_text": "A high-pitched squealing or squeaking sound when you apply the brakes is almost always the sound of the built-in 'wear indicators' on your brake pads. This is a warning that your brake pads are worn out and need to be replaced soon."
+    },
+    {
+        "query": "What are common causes of engine overheating?",
+        "reference_text": "The most common causes for engine overheating are low coolant levels, a faulty thermostat that is stuck closed, a failing water pump, or a leak in the cooling system (like a cracked hose or radiator). You should also check if the radiator fans are working."
+    },
+    {
+        "query": "How often should I rotate my tires?",
+        "reference_text": "You should generally rotate your tires every 5,000 to 7,500 miles. This helps ensure they wear evenly and extends their lifespan. Check your owner's manual for the specific recommendation for your vehicle."
+    }
 ]
+# --- END OF FILLED-IN ANSWERS ---
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,12 +66,13 @@ class DataExtractor:
         self.user_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OGJjNjgwMTI1NGJkYTgwYjJhZTEyMTYiLCJleHAiOjE5MTg3MTMxMzN9.J3qv7wjPF8H6Gr1sYJScGiqQlzRXQIeoKl3WJ3_OpH8"  # Add your test user token here
         
         # Sample vehicle configuration for testing
+# NEW (Fixed)
         self.test_vehicle = {
-            "user_id": "68a1d6288b423aba320b9a8f",  # This matches the user ID from the token
+            "user_id": "68a1d6288b423aba320b9a8f",
             "model": "Corolla",
             "brand": "Toyota",
             "year": 2020,
-            "type": "car",
+            "category": "car",  # <-- RENAMED THIS FIELD
             "fuel_type": "petrol",
             "transmission": "automatic",
             "mileage_km": 50000,
@@ -62,7 +80,6 @@ class DataExtractor:
             "is_primary": True,
             "is_active": True
         }
-
     async def start_chat_session(self) -> bool:
         """Start a new chat session"""
         async with aiohttp.ClientSession() as session:
@@ -81,7 +98,7 @@ class DataExtractor:
                 logger.error(f"Error starting chat session: {e}")
                 return False
 
-    async def query_chat_api(self, query: str) -> Dict:
+    async def query_chat_api(self, query: str, reference_text: str) -> Dict:
         """Send a query to the chat API and get response"""
         if not self.session_id:
             if not await self.start_chat_session():
@@ -99,50 +116,51 @@ class DataExtractor:
                 form_data.add_field("vehicle_json", vehicle_json)
                 
                 logger.info(f"Sending query: {query}")
-                logger.info(f"With vehicle: {vehicle_json}")
+                
                 async with session.post(self.message_endpoint, headers=headers, data=form_data) as response:
-                    response_text = await response.text()
-                    logger.info(f"Raw response: {response_text}")
+                    response_text_raw = await response.text()
                     
                     if response.status == 200:
                         result = await response.json()
-                        # Get the assistant's response
-                        response_text = result.get("response", "")
-                        if response_text:  # If we have a response
+                        response_text = result.get("response", "") # Get the assistant's response
+                        
+                        if response_text:
                             return {
                                 "query": query,
                                 "generated_text": response_text,
-                                "reference_text": response_text,  # Use same text as reference for now
+                                "reference_text": reference_text,  # <-- This is the "ground truth"
                                 "retrieved_context": result.get("context", []),
                                 "timestamp": datetime.now().isoformat()
                             }
                         else:
-                            logger.error("Response doesn't contain enough messages")
+                            logger.error("Response JSON doesn't contain 'response' key")
                             return None
                     else:
-                        logger.error(f"API error {response.status}: {response_text}")
+                        logger.error(f"API error {response.status}: {response_text_raw}")
                         return None
             except Exception as e:
                 logger.error(f"Error querying API: {e}")
                 return None
 
-    async def extract_chat_data(self, queries: List[str] = None) -> List[Dict]:
+    async def extract_chat_data(self, test_data: List[Dict] = None) -> List[Dict]:
         """Extract chat data by querying the API with test questions"""
-        if queries is None:
-            queries = TEST_QUERIES
+        if test_data is None:
+            test_data = TEST_DATA
         
         chat_data = []
-        total = len(queries)
+        total = len(test_data)
         
         logger.info(f"Starting evaluation with {total} queries")
         
         # Process queries in parallel with rate limiting
         semaphore = asyncio.Semaphore(3)  # Limit concurrent requests
-        async def process_query(query):
+        async def process_query(item):
             async with semaphore:
-                return await self.query_chat_api(query)
+                query = item["query"]
+                reference = item["reference_text"]
+                return await self.query_chat_api(query, reference)
         
-        tasks = [process_query(query) for query in queries]
+        tasks = [process_query(item) for item in test_data]
         results = await asyncio.gather(*tasks)
         
         # Filter out None results and add to chat_data
@@ -167,77 +185,77 @@ async def run_evaluation(data: List[Dict]):
     try:
         from services.rag_evaluator import RAGEvaluator, EvaluationData
         
-        # Debug the data
-        logger.info("Processing evaluation data:")
-        for item in data:
-            logger.info(f"Query: {item['query']}")
-            logger.info(f"Generated: {item['generated_text'][:100]}...")
-            logger.info(f"Reference: {item['reference_text'][:100]}...")
-            logger.info("-" * 50)
+        logger.info("Processing data for evaluation...")
         
         # Convert data to evaluation format
         eval_data = [
             EvaluationData(
                 query_id=str(idx),
                 query_text=item["query"],
-                retrieved_doc_ids=[],  # No document IDs in our case
-                relevant_doc_ids=[],   # No relevant documents in our case
-                similarity_scores=[],   # No similarity scores in our case
+                retrieved_doc_ids=[],  # We don't have this from the API response
+                relevant_doc_ids=[],   # We don't have this
+                similarity_scores=[],  # We don't have this
                 generated_text=item["generated_text"],
                 reference_text=item["reference_text"],
-                start_time=0.0,  # We don't have timing info
-                end_time=0.0,    # We don't have timing info
+                start_time=0.0,  # We don't have timing info from this script
+                end_time=1.0,    # We don't have timing info
                 metadata={"context": item.get("retrieved_context", [])}
             )
             for idx, item in enumerate(data)
-            if item["query"] and item["generated_text"] and len(item["generated_text"].strip()) > 0
-            for item in data
-            if item["query"] and item["generated_text"] and len(item["generated_text"].strip()) > 0
+            if item.get("query") and item.get("generated_text") and item.get("reference_text")
         ]
         
         if not eval_data:
-            logger.warning("No valid evaluation data found")
+            logger.warning("No valid evaluation data found (missing query, generated_text, or reference_text).")
             return
+
+        logger.info(f"Running evaluation on {len(eval_data)} items.")
             
         # Run evaluation with BERT score
         evaluator = RAGEvaluator()
-        results = evaluator.evaluate(eval_data)
+        # Set calculate_bertscore to False to skip it, as it's slow
+        results = evaluator.evaluate(eval_data, calculate_bertscore=False) 
         
         # Add BERT scores
         if len(eval_data) > 0:
-            generated_texts = [item["generated_text"] for item in data]
-            reference_texts = [item["reference_text"] for item in data]
+            logger.info("Calculating BERTScore (this can be slow)...")
+            generated_texts = [item.generated_text for item in eval_data]
+            reference_texts = [item.reference_text for item in eval_data]
             P, R, F1 = score(generated_texts, reference_texts, lang="en", verbose=True)
             
             bert_results = pd.DataFrame({
-                'Metric': ['BERT-P', 'BERT-R', 'BERT-F1'],
-                'Score': [P.mean().item(), R.mean().item(), F1.mean().item()]
+                'Category': 'Response', 'Metric': 'BERTScore_P', 'Value': [P.mean().item()]
             })
+            bert_results = pd.concat([bert_results, pd.DataFrame({
+                'Category': 'Response', 'Metric': 'BERTScore_R', 'Value': [R.mean().item()]
+            })])
+            bert_results = pd.concat([bert_results, pd.DataFrame({
+                'Category': 'Response', 'Metric': 'BERTScore_F1', 'Value': [F1.mean().item()]
+            })])
             
-            results = pd.concat([results, bert_results])
+            results = pd.concat([results, bert_results]).reset_index(drop=True)
         
         # Save evaluation results
         results_dir = Path("evaluation_results")
         results_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Save detailed results
         results_file = results_dir / f"eval_{timestamp}.csv"
         results.to_csv(results_file, index=False)
+        logger.info(f"Evaluation results saved to {results_file}")
         
         # Save raw scores for analysis
-        raw_scores = pd.DataFrame({
-            'query': [item["query"] for item in data],
-            'generated': [item["generated_text"] for item in data],
-            'reference': [item["reference_text"] for item in data],
-            'timestamp': [item["timestamp"] for item in data]
-        })
+        raw_scores = pd.DataFrame(data)
         raw_file = results_dir / f"raw_scores_{timestamp}.csv"
         raw_scores.to_csv(raw_file, index=False)
+        logger.info(f"Raw scores for manual review saved to {raw_file}")
         
-        logger.info(f"Evaluation results saved to {results_file}")
-        logger.info(f"Raw scores saved to {raw_file}")
+        print("\n--- EVALUATION RESULTS ---")
+        print(results.to_string(index=False))
+        print("--------------------------\n")
         
+    except ImportError:
+        logger.error("Could not import RAGEvaluator. Make sure 'services.rag_evaluator' is accessible.")
     except Exception as e:
         logger.error(f"Error during evaluation: {e}")
         raise
@@ -247,7 +265,7 @@ async def main():
     parser.add_argument("--api-url", default="http://localhost:8000", 
                       help="Base URL of the chat API")
     parser.add_argument("--queries-file", type=str,
-                      help="Path to JSON file containing test queries")
+                      help="Path to JSON file containing test queries (e.g., [{'query': '...', 'reference_text': '...'}])")
     parser.add_argument("--evaluate", action="store_true",
                       help="Run evaluation after collecting responses")
     parser.add_argument("--token", type=str,
@@ -256,12 +274,12 @@ async def main():
 
     try:
         # Load custom queries if provided
-        queries = None
+        test_data = None
         if args.queries_file:
             try:
                 with open(args.queries_file) as f:
-                    queries = json.load(f)
-                logger.info(f"Loaded {len(queries)} custom queries")
+                    test_data = json.load(f)
+                logger.info(f"Loaded {len(test_data)} custom queries")
             except Exception as e:
                 logger.error(f"Error loading queries file: {e}")
                 return
@@ -271,87 +289,24 @@ async def main():
         if args.token:
             extractor.user_token = args.token
         
-        # Initialize extractor with API URL
-        extractor = DataExtractor(api_url=args.api_url)
-        
         # Get responses from API
-        data = await extractor.extract_chat_data(queries=queries)
+        data = await extractor.extract_chat_data(test_data=test_data)
         if not data:
             logger.error("No responses received from API")
             return
             
         # Save raw responses
-        output_file = extractor.save_data(data)
+        extractor.save_data(data)
         
         # Run evaluation if requested
         if args.evaluate:
             await run_evaluation(data)
+        else:
+            logger.info("Data extraction complete. Run with --evaluate to get scores.")
             
     except Exception as e:
         logger.error(f"Error in main: {e}")
         raise
-        try:
-            from services.rag_evaluator import RAGEvaluator, EvaluationData
-            
-            # Convert data to evaluation format
-            eval_data = [
-                EvaluationData(
-                    query=item["query"],
-                    generated_text=item["generated_text"],
-                    reference_text=item["reference_text"],
-                    retrieved_context=item["retrieved_context"]
-                )
-                for item in data
-                if item["query"] and item["generated_text"] and item["reference_text"]
-            ]
-            
-            if not eval_data:
-                logger.warning("No valid evaluation data found")
-                return
-                
-            # Run evaluation with BERT score
-            evaluator = RAGEvaluator()
-            results = evaluator.evaluate(eval_data)
-            
-            # Add BERT scores
-            if len(eval_data) > 0:
-                generated_texts = [item["generated_text"] for item in data]
-                reference_texts = [item["reference_text"] for item in data]
-                P, R, F1 = score(generated_texts, reference_texts, lang="en", verbose=True)
-                
-                bert_results = pd.DataFrame({
-                    'Metric': ['BERT-P', 'BERT-R', 'BERT-F1'],
-                    'Score': [P.mean().item(), R.mean().item(), F1.mean().item()]
-                })
-                
-                results = pd.concat([results, bert_results])
-            
-            # Save evaluation results
-            results_dir = Path("evaluation_results")
-            results_dir.mkdir(exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # Save detailed results
-            results_file = results_dir / f"eval_{timestamp}.csv"
-            results.to_csv(results_file, index=False)
-            
-            # Save raw scores for analysis
-            raw_scores = pd.DataFrame({
-                'query': [item["query"] for item in data],
-                'generated': [item["generated_text"] for item in data],
-                'reference': [item["reference_text"] for item in data],
-                'timestamp': [item["timestamp"] for item in data]
-            })
-            raw_file = results_dir / f"raw_scores_{timestamp}.csv"
-            raw_scores.to_csv(raw_file, index=False)
-            
-            logger.info(f"Evaluation results saved to {results_file}")
-            logger.info(f"Raw scores saved to {raw_file}")
-            
-        except Exception as e:
-            logger.error(f"Error during evaluation: {e}")
-            raise
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
