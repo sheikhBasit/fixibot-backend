@@ -1,0 +1,16 @@
+[
+  {
+    "query": "What should I do if my car won't start?",
+    "generated_text": "If your car won't start, let's go through some troubleshooting steps to identify the possible cause. First, check if the dashboard lights come on when you turn the key. If they don't, it's likely that the battery is dead. In this case, you can try jump-starting the car. \n\nIf the dashboard lights do come on, but the car still won't start, it could be a problem with the starter motor, fuel delivery, or spark issues. Try to listen for any clicking sounds when you turn the key. If you hear a clicking sound, it might indicate a faulty starter motor.\n\nIf the car cranks but doesn't start, it could be a fuel or spark issue. Check the fuel level to ensure it's not empty. Also, make sure the ignition system is functioning properly.\n\nIt's also important to note that if you're driving a 2020 Corolla, the engine type and fuel system may have specific requirements or troubleshooting steps. However, without more information, it's difficult to provide model-specific advice.\n\nTo proceed, can you tell me if the dashboard lights come on when you turn the key? And have you noticed any other symptoms, such as strange noises or warning lights on the dashboard?",
+    "reference_text": "If your car won't start, the most common causes are a dead battery, a faulty starter, or an empty fuel tank. First, check if your headlights and interior lights work; if they are dim or dead, your battery is likely the issue. You can try jump-starting it.",
+    "retrieved_context": [],
+    "timestamp": "2025-11-13T01:13:40.254756"
+  },
+  {
+    "query": "How do I check my car's oil level?",
+    "generated_text": "To check your car's oil level, you'll want to make sure the engine is turned off and the vehicle is parked on a level surface. Locate the oil dipstick, which is usually labeled \"Oil\" or have an oil can symbol on it. Pull out the dipstick and wipe it clean with a lint-free cloth or paper towel. Insert the dipstick back into the oil reservoir and pull it out again. The dipstick will now be coated with oil, and you can check the oil level by looking at the end of the dipstick. The oil level should be between the \"MIN\" and \"MAX\" marks on the dipstick.\n\nIt's also a good idea to check the oil color. If it's dark or dirty, it may be a sign that the oil is dirty and needs to be changed. Additionally, if you notice any signs of oil leaks, such as oil spots under the vehicle, you should address the issue promptly to prevent further complications.\n\nIn your case, since you have a 2020 Corolla with a petrol engine, you can refer to your owner's manual for specific instructions on how to check the oil level, as the location of the oil dipstick may vary. However, the general process remains the same. If you're unsure or notice any issues, it's always best to consult a professional mechanic for assistance.",
+    "reference_text": "To check your oil level, park the car on level ground and wait for the engine to cool down. Pull out the dipstick, wipe it clean with a rag, insert it all the way back in, and then pull it out again. The oil level should be between the 'Full' and 'Add' (or 'F' and 'L') marks.",
+    "retrieved_context": [],
+    "timestamp": "2025-11-13T01:13:40.055458"
+  }
+]

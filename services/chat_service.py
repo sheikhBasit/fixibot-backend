@@ -153,48 +153,132 @@ class ChatService:
                 logger.error(f"Image analysis failed: {e}", exc_info=True)
                 return {"context_1": "Image analysis failed", **inputs}
 
+        # def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        #     """Retrieve relevant information from vector store"""
+        #     try:
+        #         vehicle = inputs.get("vehicle", {})
+        #         prompt = inputs["prompt"]
+        #         chat_history = inputs.get("chat_history", [])
+
+        #         # Get last 2 user messages for context
+        #         history_context = "\n".join(
+        #             [msg.content for msg in chat_history[-4:] if hasattr(msg, 'content')]
+        #         )
+
+        #         # Build context-aware query
+        #         is_model_specific = any(word in prompt.lower() for word in [
+        #             "where is", "location", "specific", "particular", "this model",
+        #             "my model", "different", "varies", "compatible"
+        #         ])
+
+        #         enhanced_question = (
+        #             f"Conversation Context:\n{history_context}\n\n"
+        #             f"User Query: {prompt}"
+        #         )
+
+        #         # Only add vehicle details if the query seems to need model-specific info
+        #         if is_model_specific:
+        #             enhanced_question += f"\nVehicle Details: {vehicle.get('brand', '')} {vehicle.get('model', '')} {vehicle.get('year', '')}"
+
+        #         # Manual embedding and search
+        #         query_embedding = embed_text(enhanced_question)
+                
+        #         # Manual similarity search
+        #         docs_and_scores = self.vectorstore.similarity_search_by_vector(
+        #             query_embedding,
+        #             k=3,
+        #             filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
+        #         )
+                
+        #         # Combine text and image context
+        #         text_context = "\n---\n".join([doc.page_content for doc in docs_and_scores])
+        #         multimodal_context = []
+                
+        #         for doc in docs_and_scores:
+        #             if doc.metadata.get("type") == "image":
+        #                 image_id = doc.metadata.get("image_id")
+        #                 if image_id in self.image_data_store:
+        #                     multimodal_context.append({
+        #                         "type": "image_url",
+        #                         "image_url": {
+        #                             "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
+        #                         }
+        #                     })
+                
+        #         return {
+        #             **inputs,
+        #             "context_2": text_context,
+        #             "multimodal_context": multimodal_context
+        #         }
+        #     except Exception as e:
+        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
+        #         return {**inputs, "context_2": "Knowledge retrieval failed"}
+
         def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """Retrieve relevant information from vector store"""
+            """
+            Retrieve relevant information from vector store with proper score handling
+            and expose retrieved documents for testing/evaluation.
+            """
             try:
                 vehicle = inputs.get("vehicle", {})
                 prompt = inputs["prompt"]
                 chat_history = inputs.get("chat_history", [])
 
-                # Get last 2 user messages for context
+                # Get last 4 messages for context
                 history_context = "\n".join(
-                    [msg.content for msg in chat_history[-4:] if hasattr(msg, 'content')]
+                [str(msg.content) for msg in chat_history[-4:] if hasattr(msg, 'content') and msg.content is not None]
                 )
 
-                # Build context-aware query
-                is_model_specific = any(word in prompt.lower() for word in [
-                    "where is", "location", "specific", "particular", "this model",
-                    "my model", "different", "varies", "compatible"
-                ])
+                prompt = str(inputs["prompt"])  # ensure prompt is string
 
-                enhanced_question = (
-                    f"Conversation Context:\n{history_context}\n\n"
-                    f"User Query: {prompt}"
-                )
-
-                # Only add vehicle details if the query seems to need model-specific info
-                if is_model_specific:
-                    enhanced_question += f"\nVehicle Details: {vehicle.get('brand', '')} {vehicle.get('model', '')} {vehicle.get('year', '')}"
-
-                # Manual embedding and search
+                enhanced_question = f"Conversation Context:\n{history_context}\n\nUser Query: {prompt}"
                 query_embedding = embed_text(enhanced_question)
-                
-                # Manual similarity search
-                docs_and_scores = self.vectorstore.similarity_search_by_vector(
-                    query_embedding,
+
+
+                # --- FAISS similarity search with scores ---
+                docs_and_scores = self.vectorstore.similarity_search_with_score(
+                    # query_embedding,
+                    enhanced_question,
                     k=3,
                     filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 )
-                
-                # Combine text and image context
-                text_context = "\n---\n".join([doc.page_content for doc in docs_and_scores])
+
+                # Debug: raw docs_and_scores
+                print("\n=== Raw docs_and_scores ===")
+                print(docs_and_scores)
+                print("===========================\n")
+
+                # Normalize docs_and_scores to list of (Document, score)
+                normalized = []
+                for item in docs_and_scores:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        doc, score = item
+                    elif hasattr(item, "page_content"):
+                        doc = item
+                        score = None
+                    else:
+                        logger.warning(f"Unexpected item format in docs_and_scores: {item}")
+                        continue
+                    normalized.append((doc, score))
+
+                # Debug: print retrieved docs and scores
+                print("\n=== Retrieval Debug ===")
+                print(f"Query: {prompt}")
+                print("Retrieved documents and scores:")
+                for idx, (doc, score) in enumerate(normalized):
+                    doc_id = doc.metadata.get("source", "unknown")
+                    print(f"{idx+1}. doc_id: {doc_id}, score: {score}")
+                print("======================\n")
+
+                # Extract docs list
+                docs = [doc for doc, _ in normalized]
+
+                # Build text context
+                text_context = "\n---\n".join([doc.page_content for doc in docs])
+
+                # Build multimodal context (for images)
                 multimodal_context = []
-                
-                for doc in docs_and_scores:
+                for doc, _ in normalized:
                     if doc.metadata.get("type") == "image":
                         image_id = doc.metadata.get("image_id")
                         if image_id in self.image_data_store:
@@ -204,15 +288,31 @@ class ChatService:
                                     "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
                                 }
                             })
-                
+
+                # Build retrieved_context for evaluation
+                retrieved_context = [
+                    {
+                        "doc_id": doc.metadata.get("source", "unknown"),
+                        "score": round(score, 3) if isinstance(score, (int, float)) else None
+                    }
+                    for doc, score in normalized
+                ]
+
+                # Return complete response
                 return {
                     **inputs,
                     "context_2": text_context,
-                    "multimodal_context": multimodal_context
+                    "multimodal_context": multimodal_context,
+                    "retrieved_context": retrieved_context
                 }
+
             except Exception as e:
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
-                return {**inputs, "context_2": "Knowledge retrieval failed"}
+                return {
+                    **inputs,
+                    "context_2": "Knowledge retrieval failed",
+                    "retrieved_context": []
+                }
 
         def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""

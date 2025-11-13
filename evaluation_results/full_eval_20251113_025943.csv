@@ -1,0 +1,7 @@
+Metric,Value
+Top-1 Accuracy,0.0
+Top-3 Accuracy,0.0
+Top-5 Accuracy,0.0
+BERTScore_P,0.8458203673362732
+BERTScore_R,0.9022139310836792
+BERTScore_F1,0.8730751276016235

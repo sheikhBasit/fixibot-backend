@@ -1,0 +1,16 @@
+[
+  {
+    "query": "What should I do if my car won't start?",
+    "generated_text": "If your car won't start, let's go through some steps to diagnose the issue. First, ensure you're in a safe location, away from traffic. Next, check the basics: make sure the parking brake is off, the transmission is in park (or neutral for manual transmissions), and the ignition switch is functioning properly.\n\nNow, let's consider possible causes. A dead battery is a common reason for a no-start condition. Check the battery terminals for corrosion and ensure they're clean and secure. If the battery is old or weak, it might not be holding a charge. You can try jump-starting the car to see if that gets it running.\n\nAnother possibility is a faulty starter motor or ignition switch. If the starter motor is malfunctioning, you might hear a clicking sound when you turn the key, but the engine won't turn over. If the ignition switch is the problem, you might not hear any sounds at all.\n\nTo further diagnose the issue, can you tell me what happens when you turn the key? Do you hear any clicking sounds, or is it completely silent? Additionally, have you noticed any other symptoms, such as dashboard warning lights or unusual noises, that might be related to the no-start condition?",
+    "reference_text": "If your car won't start, the most common causes are a dead battery, a faulty starter, or an empty fuel tank. First, check if your headlights and interior lights work; if they are dim or dead, your battery is likely the issue. You can try jump-starting it.",
+    "retrieved_context": [],
+    "timestamp": "2025-11-13T02:06:23.069851"
+  },
+  {
+    "query": "How do I check my car's oil level?",
+    "generated_text": "To check your car's oil level, start by ensuring the vehicle is parked on a level surface and turned off. Let it sit for a few minutes to allow the oil to drain back into the oil pan. Open the hood and locate the oil dipstick, which is usually labeled \"Oil\" or have an oil can symbol on it. Pull out the dipstick and wipe it clean with a lint-free cloth or paper towel. Insert the dipstick back into the oil reservoir and pull it out again. The dipstick will now be coated with oil, and the oil level will be indicated by the oil level on the dipstick. \n\nThe oil level should be between the \"MIN\" and \"MAX\" marks on the dipstick. If it's below the \"MIN\" mark, you'll need to add oil. Be sure to check your owner's manual for the correct type of oil to use in your vehicle. It's also a good idea to check the oil color and consistency. If it's dark or dirty, it may be a sign that the oil is due for a change. \n\nRemember to always refer to your owner's manual for specific instructions on how to check the oil level in your particular vehicle, as the location of the oil dipstick and other details may vary. If you're unsure or uncomfortable checking the oil level yourself, consider consulting a professional mechanic for assistance.",
+    "reference_text": "To check your oil level, park the car on level ground and wait for the engine to cool down. Pull out the dipstick, wipe it clean with a rag, insert it all the way back in, and then pull it out again. The oil level should be between the 'Full' and 'Add' (or 'F' and 'L') marks.",
+    "retrieved_context": [],
+    "timestamp": "2025-11-13T02:06:23.011793"
+  }
+]
