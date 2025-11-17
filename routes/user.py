@@ -615,50 +615,162 @@ async def update_user_me(
 
 
 
+# @router.post("/google", response_model=LoginResponse)
+# async def google_login(payload: GoogleSignIn):
+#     """
+#     Handles Google Sign-In.
+#     Receives a Google ID token, verifies it, finds or creates a user,
+#     and returns the application's own JWT and user data.
+#     """
+#     try:
+#         # Run the blocking I/O call in a separate thread
+#         idinfo = await asyncio.to_thread(
+#             id_token.verify_oauth2_token,
+#             payload.token,
+#             google_requests.Request(),
+#             settings.GOOGLE_CLIENT_ID
+#         )
+
+#         email = idinfo.get("email")
+#         if not email:
+#             logger.warning("Google token verified but email was missing.")
+#             raise HTTPException(
+#                 status_code=400, 
+#                 detail="Invalid Google token: Email not found."
+#             )
+
+#         # Get user info from Google
+#         first_name = idinfo.get("given_name", "")
+#         last_name = idinfo.get("family_name", "")
+#         # Use 'picture or None' to handle empty strings
+#         picture = idinfo.get("picture") or None
+
+#         # Check if user already exists
+#         user_doc = await db.users_collection.find_one({"email": email})
+        
+#         if user_doc:
+#             # --- USER EXISTS ---
+#             user = UserInDB(**user_doc)
+            
+#             # Check if name or picture needs updating
+#             update_fields = {}
+#             if user.first_name != first_name and first_name:
+#                 update_fields["first_name"] = first_name
+#             if user.last_name != last_name and last_name:
+#                 update_fields["last_name"] = last_name
+#             if user.profile_picture != picture:
+#                 update_fields["profile_picture"] = picture
+                
+#             if update_fields:
+#                 logger.info(f"Updating profile for existing user: {email}")
+#                 update_fields["updated_at"] = datetime.now(timezone.utc)
+#                 await db.users_collection.update_one(
+#                     {"_id": user.id},
+#                     {"$set": update_fields}
+#                 )
+#                 # Update local model instance
+#                 user = user.model_copy(update=update_fields)
+
+#         else:
+#             # --- CREATE NEW USER ---
+#             logger.info(f"New user signing up via Google: {email}")
+            
+#             # 1. Create the base data using your UserBase model
+#             user_base_data = UserBase(
+#                 first_name=first_name or "Google",
+#                 last_name=last_name or "User",
+#                 email=email,
+#                 profile_picture=picture,
+#                 is_verified=True,  # Google verified this email
+#             )
+            
+#             # 2. Create the full UserInDB object.
+#             # This runs default factories for created_at, updated_at, and id.
+#             user = UserInDB(
+#                 **user_base_data.model_dump(),
+#                 hashed_password=None  # Use None for social login
+#             )
+
+#             # 3. Dump to dict for MongoDB, using aliases (so 'id' becomes '_id')
+#             user_doc_to_insert = user.model_dump(by_alias=True)
+            
+#             # 4. Insert the document
+#             await db.users_collection.insert_one(user_doc_to_insert)
+#             # The 'user' object is already complete and correct
+
+#         # --- TOKEN CREATION & RESPONSE ---
+        
+#         # Generate JWT token for our app
+#         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_DAYS)
+#         token_str = create_access_token(
+#             data={"sub": str(user.id)}, # 'sub' is standard for user ID
+#             expires_delta=access_token_expires
+#         )
+
+#         # Create the UserOut model from the UserInDB model
+#         # This works because UserOut has model_config(from_attributes=True)
+#         user_out_data = UserOut.model_validate(user)
+
+#         # Return the successful response
+#         return LoginResponse(
+#             access_token=token_str,
+#             token_type="bearer",
+#             expires_in=int(access_token_expires.total_seconds()),
+#             user=user_out_data
+#         )
+
+#     except ValueError as e:
+#         # This catches errors from id_token.verify_oauth2_token
+#         logger.error(f"Invalid Google token: {e}", exc_info=True)
+#         raise HTTPException(
+#             status_code=400, # Corrected from 4.00
+#             detail="Invalid Google token"
+#         )
+#     except Exception as e:
+#         logger.error(f"An unexpected error occurred during Google login: {e}", exc_info=True)
+#         raise HTTPException(
+#             status_code=500, 
+#             detail="Internal server error"
+#         )
+
+
 @router.post("/google", response_model=LoginResponse)
 async def google_login(payload: GoogleSignIn):
-    """
-    Handles Google Sign-In.
-    Receives a Google ID token, verifies it, finds or creates a user,
-    and returns the application's own JWT and user data.
-    """
     try:
-        # Run the blocking I/O call in a separate thread
-        idinfo = await asyncio.to_thread(
-            id_token.verify_oauth2_token,
-            payload.token,
-            google_requests.Request(),
-            settings.GOOGLE_CLIENT_ID
-        )
+        # 1. Verify Token
+        try:
+            idinfo = await asyncio.to_thread(
+                id_token.verify_oauth2_token,
+                payload.token,
+                google_requests.Request(),
+                settings.GOOGLE_CLIENT_ID
+            )
+        except ValueError as e:
+            logger.error(f"Token verification failed: {e}")
+            raise HTTPException(status_code=400, detail="Invalid Google token")
 
         email = idinfo.get("email")
         if not email:
-            logger.warning("Google token verified but email was missing.")
-            raise HTTPException(
-                status_code=400, 
-                detail="Invalid Google token: Email not found."
-            )
+            raise HTTPException(status_code=400, detail="Email not found in token")
 
-        # Get user info from Google
-        first_name = idinfo.get("given_name", "")
-        last_name = idinfo.get("family_name", "")
-        # Use 'picture or None' to handle empty strings
-        picture = idinfo.get("picture") or None
+        first_name = idinfo.get("given_name", "Google")
+        last_name = idinfo.get("family_name", "User")
+        picture = idinfo.get("picture")
 
-        # Check if user already exists
+        # 2. Check for existing user
         user_doc = await db.users_collection.find_one({"email": email})
         
         if user_doc:
             # --- USER EXISTS ---
             user = UserInDB(**user_doc)
             
-            # Check if name or picture needs updating
+            # Update profile picture/name if changed
             update_fields = {}
             if user.first_name != first_name and first_name:
                 update_fields["first_name"] = first_name
             if user.last_name != last_name and last_name:
                 update_fields["last_name"] = last_name
-            if user.profile_picture != picture:
+            if picture and user.profile_picture != picture:
                 update_fields["profile_picture"] = picture
                 
             if update_fields:
@@ -668,67 +780,66 @@ async def google_login(payload: GoogleSignIn):
                     {"_id": user.id},
                     {"$set": update_fields}
                 )
-                # Update local model instance
                 user = user.model_copy(update=update_fields)
 
         else:
             # --- CREATE NEW USER ---
             logger.info(f"New user signing up via Google: {email}")
             
-            # 1. Create the base data using your UserBase model
-            user_base_data = UserBase(
-                first_name=first_name or "Google",
-                last_name=last_name or "User",
+            # Create the UserInDB object (hashed_password is Explicitly None)
+            user = UserInDB(
+                first_name=first_name,
+                last_name=last_name,
                 email=email,
                 profile_picture=picture,
-                is_verified=True,  # Google verified this email
-            )
-            
-            # 2. Create the full UserInDB object.
-            # This runs default factories for created_at, updated_at, and id.
-            user = UserInDB(
-                **user_base_data.model_dump(),
-                hashed_password=None  # Use None for social login
+                is_verified=True,
+                hashed_password=None, 
+                role="user"
             )
 
-            # 3. Dump to dict for MongoDB, using aliases (so 'id' becomes '_id')
-            user_doc_to_insert = user.model_dump(by_alias=True)
+            # --- CRITICAL SERIALIZATION FIXES ---
+            # 1. Dump to JSON (handles Enums/URLs)
+            user_doc_to_insert = user.model_dump(by_alias=True, mode='json')
             
-            # 4. Insert the document
+            # 2. Restore ObjectId (db expects object, not string)
+            if "_id" in user_doc_to_insert:
+                from bson import ObjectId
+                user_doc_to_insert["_id"] = ObjectId(user_doc_to_insert["_id"])
+
+            # 3. Restore Dates (db expects ISODate, not string)
+            if "created_at" in user_doc_to_insert:
+                user_doc_to_insert["created_at"] = user.created_at
+            if "updated_at" in user_doc_to_insert:
+                user_doc_to_insert["updated_at"] = user.updated_at
+
+            # 4. >>> THE FIX FOR YOUR ERROR <<<
+            # Delete phone_number if it is None. 
+            # This forces MongoDB to see it as "Missing" (Allowed) instead of "Null" (Duplicate)
+            if "phone_number" in user_doc_to_insert and user_doc_to_insert["phone_number"] is None:
+                del user_doc_to_insert["phone_number"]
+
+            # 5. Insert
             await db.users_collection.insert_one(user_doc_to_insert)
-            # The 'user' object is already complete and correct
 
-        # --- TOKEN CREATION & RESPONSE ---
-        
-        # Generate JWT token for our app
+        # --- TOKEN CREATION ---
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_DAYS)
         token_str = create_access_token(
-            data={"sub": str(user.id)}, # 'sub' is standard for user ID
+            data={"sub": str(user.id)},
             expires_delta=access_token_expires
         )
 
-        # Create the UserOut model from the UserInDB model
-        # This works because UserOut has model_config(from_attributes=True)
-        user_out_data = UserOut.model_validate(user)
-
-        # Return the successful response
         return LoginResponse(
             access_token=token_str,
             token_type="bearer",
             expires_in=int(access_token_expires.total_seconds()),
-            user=user_out_data
+            user=UserOut.model_validate(user)
         )
 
-    except ValueError as e:
-        # This catches errors from id_token.verify_oauth2_token
-        logger.error(f"Invalid Google token: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=400, # Corrected from 4.00
-            detail="Invalid Google token"
-        )
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"An unexpected error occurred during Google login: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, 
-            detail="Internal server error"
-        )
+        # Keep the error logging active
+        import traceback
+        traceback.print_exc() 
+        logger.error(f"CRITICAL ERROR in google_login: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
