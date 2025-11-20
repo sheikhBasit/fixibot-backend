@@ -69,7 +69,13 @@ class ImageAnalyzer:
             try:
                 print(f"[DEBUG] Client initialization attempt {attempt + 1}/{max_attempts}")
                 
+                # --- ADD THIS BLOCK ---
+                print(f"[DEBUG] Using Base URL: https://router.huggingface.co/v1") # Verify you changed this
+                print(f"[DEBUG] HF Token Present: {bool(self.hf_token)}")
+                print(f"[DEBUG] Token (first 4 chars): {self.hf_token[:4]}...")
+                # ----------------------
                 client = AsyncOpenAI(
+                    # base_url="https://router.huggingface.co/v1",
                     base_url="https://router.huggingface.co/v1",
                     api_key=self.hf_token  # Use the stored token
                 )
@@ -118,6 +124,10 @@ class ImageAnalyzer:
         Returns:
             Analysis result as string or error message if analysis fails
         """
+        # --- ADD THIS BLOCK ---
+        print(f"\n[DEBUG] >>> ImageAnalyzer.analyze CALLED <<<")
+        print(f"[DEBUG] Input Type: {type(image_input)}")
+        print(f"[DEBUG] Vehicle Info: {vehicle_info}")
         if not self.client:
             raise RuntimeError("ImageAnalyzer not initialized. Call await .initialize() first.")
 
@@ -320,7 +330,10 @@ class ImageAnalyzer:
                     timeout=self.timeout
                 )
                 elapsed = time.time() - start_time
-                
+                # --- ADD THIS BLOCK ---
+                print(f"[DEBUG] API Call Time: {elapsed:.2f}s")
+                print(f"[DEBUG] Full API Response: {response}")
+                # ----------------------
                 print(f"[DEBUG] Analysis completed in {elapsed:.2f}s")
                 return self._process_response(response)
                 

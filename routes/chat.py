@@ -66,22 +66,27 @@ async def process_message(
                 raise HTTPException(status_code=400, detail=f"Invalid vehicle data: {str(e)}")
 
         # 3. Handle image upload
+        print(image)
         image_url = None
-        if isinstance(image, UploadFile) and image.filename:
+        if hasattr(image, "filename") and image.filename:
+            print(image)
+            
             try:
                 if image.content_type not in settings.ALLOWED_IMAGE_TYPES:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Invalid image type. Allowed: {settings.ALLOWED_IMAGE_TYPES}"
                     )
+
                 image_url = await process_uploaded_image(image)
+                print(image_url)
                 chat_session.image_history.append(image_url)
             except HTTPException:
                 raise
             except Exception as e:
                 logger.error(f"Failed to process image: {str(e)}")
                 raise HTTPException(status_code=500, detail="Failed to process uploaded image")
-
+        print(f"[DEBUG] Passing to ChatService - image_url: {image_url}")
         # 4. Add user message to chat history
         chat_session.chat_history.append(ChatMessage(role="user", content=message))
 

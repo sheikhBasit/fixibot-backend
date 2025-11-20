@@ -236,6 +236,8 @@ class ImageValidator:
     async def _validate_general(self, img: Image.Image, expected_type: str) -> bool:
         """Hybrid validation using ML and heuristics"""
         # First apply heuristic checks
+        if expected_type == 'other':
+            return True
         w, h = img.size
         aspect_ratio = w / h
         

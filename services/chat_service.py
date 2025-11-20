@@ -147,7 +147,9 @@ class ChatService:
                     inputs["image_url"],
                     prompt=user_question,
                     vehicle_info=vehicle_info
+                    
                 )
+                print(f"[DEBUG] Analysis Result: {str(analysis)[:100]}...")
                 return {"context_1": analysis, **inputs}
             except Exception as e:
                 logger.error(f"Image analysis failed: {e}", exc_info=True)
@@ -236,13 +238,18 @@ class ChatService:
 
 
                 # --- FAISS similarity search with scores ---
-                docs_and_scores = self.vectorstore.similarity_search_with_score(
-                    # query_embedding,
-                    enhanced_question,
+                # docs_and_scores = self.vectorstore.similarity_search_with_score(
+                #     # query_embedding,
+                #     enhanced_question,
+                #     k=3,
+                #     filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
+                # )
+
+                docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
+                    query_embedding,  # Pass the computed embedding here
                     k=3,
                     filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 )
-
                 # Debug: raw docs_and_scores
                 print("\n=== Raw docs_and_scores ===")
                 print(docs_and_scores)
