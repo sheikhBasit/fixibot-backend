@@ -393,7 +393,7 @@ async def search_nearby_mechanics(
         city=city, 
         expertise=expertise_list,
         min_experience=min_experience,
-        vehicle_type=vehicle_type,
+        vehicle_types=vehicle_type,
         latitude=latitude,
         longitude=longitude,
         max_distance_km=max_distance_km

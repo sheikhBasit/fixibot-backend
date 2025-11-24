@@ -331,10 +331,10 @@ class MechanicService:
                 expertise_values = [e.value for e in expertise]
                 query["expertise"] = {"$all": expertise_values}
             
-            if vehicle_type:
+            if vehicle_types:
                 # The DB field is 'serviced_vehicle_types' (single string)
                 # We check for a match on the single string value.
-                query["serviced_vehicle_types"] = vehicle_type.value #
+                query["serviced_vehicle_types"] = vehicle_types.value #
 
             # Add geospatial query if coordinates provided
             if is_geo_search:
