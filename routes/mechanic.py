@@ -217,7 +217,6 @@ async def update_mechanic_profile(
 
 
 # Assuming your other imports and models are defined
-
 @router.patch("/{mechanic_id}", response_model=MechanicOut)
 async def update_mechanic_admin(
     mechanic_id: str,
@@ -231,18 +230,17 @@ async def update_mechanic_admin(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     expertise: Optional[List[ExpertiseEnum]] = Form(None),
-    # 💡 ADDED: Vehicle Type for admin update
     serviced_vehicle_types: Optional[VehicleTypeEnum] = Form(None),
     years_of_experience: Optional[int] = Form(None),
-    workshop_name: Optional[str]=Form(None),
+    workshop_name: Optional[str] = Form(None),
     is_verified: Optional[bool] = Form(None),
     is_available: Optional[bool] = Form(None),
     working_days: Optional[List[WeekdayEnum]] = Form(None),
     start_time: Optional[str] = Form(None),
     end_time: Optional[str] = Form(None),
-    profile_picture: Optional[Union[UploadFile,str]] = File(None),
-    cnic_front: Optional[Union[UploadFile,str]] = File(None),
-    cnic_back: Optional[Union[UploadFile,str]] = File(None),
+     profile_picture: Optional[Union[UploadFile, str]] = File(None),
+    cnic_front: Optional[Union[UploadFile, str]] = File(None),
+    cnic_back: Optional[Union[UploadFile, str]] = File(None),
     current_user: UserInDB = Depends(get_current_user),
 ):
     """Update any mechanic's profile (admin only, partial update)."""
@@ -258,6 +256,24 @@ async def update_mechanic_admin(
             return None
         return value
 
+    # ✅ Helper function to validate file uploads
+    # Convert empty strings to None BEFORE validation
+    if isinstance(profile_picture, str) and profile_picture.strip() == "":
+        profile_picture = None
+    if isinstance(cnic_front, str) and cnic_front.strip() == "":
+        cnic_front = None
+    if isinstance(cnic_back, str) and cnic_back.strip() == "":
+        cnic_back = None
+
+    def is_valid_upload(file: Optional[UploadFile]) -> bool:
+        if not file or isinstance(file, str):
+            return False
+        if not hasattr(file, "filename"):
+            return False
+        if not file.filename or not file.filename.strip():
+            return False
+        return True
+
     # Process all incoming form fields to handle empty strings
     cleaned_data = {
         "first_name": clean_form_value(first_name),
@@ -267,10 +283,9 @@ async def update_mechanic_admin(
         "province": clean_form_value(province),
         "city": clean_form_value(city),
         "address": clean_form_value(address),
-        "latitude": latitude,  # No need to clean floats
-        "longitude": longitude, # No need to clean floats
+        "latitude": latitude,
+        "longitude": longitude,
         "expertise": clean_form_value(expertise),
-        # 💡 ADDED: Vehicle Type to cleaned_data
         "serviced_vehicle_types": clean_form_value(serviced_vehicle_types), 
         "years_of_experience": clean_form_value(years_of_experience),
         "workshop_name": clean_form_value(workshop_name),
@@ -279,27 +294,40 @@ async def update_mechanic_admin(
         "working_days": clean_form_value(working_days),
         "start_time": clean_form_value(start_time),
         "end_time": clean_form_value(end_time),
-        "profile_picture": profile_picture,
-        "cnic_front": cnic_front,
-        "cnic_back": cnic_back
     }
      
-    # Handle file uploads if present
-    # Check if value is a file, or a URL string from a previous update
-    profile_pic_url = cleaned_data["profile_picture"]
-    if isinstance(profile_pic_url, UploadFile):
-        profile_pic_url = await upload_image(profile_pic_url, expected_type='user')
+    # ✅ FIXED: Handle file uploads with proper validation
+    profile_pic_url = None
+    if is_valid_upload(profile_picture):
+        try:
+            profile_pic_url = await upload_image(profile_picture, expected_type='user')
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload profile picture: {str(e)}"
+            )
      
-    cnic_front_url = cleaned_data["cnic_front"]
-    if isinstance(cnic_front_url, UploadFile):
-        cnic_front_url = await upload_image(cnic_front_url, expected_type='cnic')
+    cnic_front_url = None
+    if is_valid_upload(cnic_front):
+        try:
+            cnic_front_url = await upload_image(cnic_front, expected_type='cnic')
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload CNIC front: {str(e)}"
+            )
      
-    cnic_back_url = cleaned_data["cnic_back"]
-    if isinstance(cnic_back_url, UploadFile):
-        cnic_back_url = await upload_image(cnic_back_url, expected_type='cnic')
+    cnic_back_url = None
+    if is_valid_upload(cnic_back):
+        try:
+            cnic_back_url = await upload_image(cnic_back, expected_type='cnic')
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload CNIC back: {str(e)}"
+            )
      
-    # --- Corrected Working Hours and Days Handling ---
-    # The cleaned_data dictionary now has None for missing values
+    # Handle working hours
     working_hours = None
     if cleaned_data["start_time"] is not None and cleaned_data["end_time"] is not None:
         try:
@@ -313,7 +341,7 @@ async def update_mechanic_admin(
                 detail=f"Invalid working hours format: {str(e)}"
             )
 
-    # Create update data model with cleaned values
+    # Create update data model with URLs (strings), not UploadFile objects
     update_data = MechanicUpdate(
         first_name=cleaned_data["first_name"],
         last_name=cleaned_data["last_name"],
@@ -325,7 +353,6 @@ async def update_mechanic_admin(
         latitude=cleaned_data["latitude"],
         longitude=cleaned_data["longitude"],
         expertise=cleaned_data["expertise"],
-        # 💡 ADDED: Vehicle Type to MechanicUpdate
         serviced_vehicle_types=cleaned_data["serviced_vehicle_types"],
         years_of_experience=cleaned_data["years_of_experience"],
         workshop_name=cleaned_data["workshop_name"],
@@ -339,7 +366,6 @@ async def update_mechanic_admin(
     )
      
     return await MechanicService.update_mechanic(mechanic_id, update_data)
-
 @router.get("/{mechanic_id}", response_model=MechanicOut)
 async def get_mechanic(mechanic_id: str):
     """Get mechanic by ID."""
