@@ -17,7 +17,7 @@ from services.image_analyzer import ImageAnalyzer
 # from services.vectorstore import process_pdf_with_images
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.staticfiles import StaticFiles
-from services.intent_classifier import IntentClassifier
+# from services.intent_classifier import IntentClassifier
 from services.simple_responses import SimpleResponseGenerator
 # App imports
 from routes import chat, health, mechanic, mechanic_service, self_help, user, vehicle, feedback, ai_service, analytics, admin, support  
@@ -25,6 +25,10 @@ from config import settings
 from utils.logging import configure_logging
 from database import connect_to_mongo, close_mongo_connection
 import asyncio
+
+
+from services.intent_classifier import SandwichProcessor
+from services.simple_responses import SimpleResponseGenerator
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -48,7 +52,8 @@ async def initialize_services():
 
              # Initialize intent classifier
             logger.info("Initializing intent classifier...")
-            app.state.intent_classifier = IntentClassifier(settings.GROQ_API_KEY)
+            # app.state.intent_classifier = IntentClassifier(settings.GROQ_API_KEY)
+            app.state.sandwich_processor = SandwichProcessor(api_key=settings.GROQ_API_KEY)
             logger.info("Intent classifier initialized successfully")
 
             # Initialize diagnostic agent

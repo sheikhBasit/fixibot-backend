@@ -12,9 +12,12 @@ from models.chat import ChatSession
 from models.vehicle import VehicleModel
 from config import settings
 from services.dependencies import get_diagnostic_agent, get_image_analyzer, get_vectorstore
-from services.intent_classifier import get_intent_classifier
 from services.simple_responses import SimpleResponseGenerator
 from datetime import datetime
+
+# from services.intent_classifier import get_intent_classifier
+# ... imports ...
+from services.dependencies import get_sandwich_processor
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +26,11 @@ class ChatService:
         self.vectorstore, self.image_data_store = get_vectorstore(request)
         self.diagnostic_agent = get_diagnostic_agent(request)
         self.image_analyzer = get_image_analyzer(request)
-        self.intent_classifier = get_intent_classifier(request)
+        # self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
+
+         # Use SandwichProcessor instead of IntentClassifier
+        self.sandwich = get_sandwich_processor(request)
     
     def _is_off_topic_or_inappropriate(self, text: str) -> bool:
         """Check if the message is off-topic or inappropriate"""
@@ -44,10 +50,9 @@ class ChatService:
             
         return False
 
-    async def _determine_processing_path(self, user_input: str, chat_history: list) -> Literal["simple", "rag", "command", "off_topic"]:
+    def _determine_processing_path(self, intent: str, user_input: str) -> Literal["simple", "rag", "command", "off_topic"]:
         """Determine the processing path based on user intent"""
-        intent = await self.intent_classifier.classify_intent(user_input, chat_history)
-        
+        # Intent is already determined by Sandwich Step 1
         logger.info(f"Detected intent: {intent} for message: '{user_input}'")
         
         # Check for off-topic or inappropriate content first
@@ -76,9 +81,12 @@ class ChatService:
         async def simple_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate simple conversational responses"""
             try:
+                # Get intent from inputs (provided by Sandwich processor)
+                intent = inputs.get("intent", "other")
+                
                 # First try to get a predefined response
                 predefined_response = SimpleResponseGenerator.get_response(
-                    await self.intent_classifier.classify_intent(inputs["prompt"], inputs.get("chat_history", [])),
+                    intent,
                     inputs["prompt"]
                 )
                 
@@ -340,58 +348,36 @@ class ChatService:
                         chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append(msg)
-                enhanced_system_prompt = f"""You are an expert automotive diagnostic technician with deep knowledge of all vehicle types.
-
-                CORE ROLE:
-                - Provide accurate, relevant diagnostic advice and solutions
-                - Focus on safety-critical information and proper repair procedures
-                - Maintain a professional yet conversational tone
-
-                VEHICLE CONTEXT (Use contextually, don't repeat unnecessarily):
-                - Make: {vehicle_info['make']}
-                - Model: {vehicle_info['model']}
-                - Year: {vehicle_info['year']}
-                - Fuel Type: {vehicle_info['fuel_type']}
-                - Engine Type: {vehicle_info['engine_type']}
-
-                RESPONSE GUIDELINES:
-                1. Keep conversation natural and flowing
-                2. Structure responses clearly:
-                   - Acknowledge the issue directly
-                   - Explain possible causes
-                   - Provide clear diagnostic steps
-                   - Recommend appropriate actions
-                3. Reference vehicle details ONLY when relevant:
-                   - When specific parts differ by model
-                   - When discussing model-specific issues
-                   - When location of components varies
-                4. DON'T mention vehicle details when:
-                   - Discussing general maintenance
-                   - Giving universal advice
-                   - In follow-up messages
-                   - When context is already clear
-                5. Maintain natural conversation flow:
-                   - Use pronouns (it, your vehicle) instead of repeating specs
-                   - Only mention model details for specific technical info
-                   - Keep responses conversational but professional
-                6. Focus on the issue:
-                   - Address the problem directly
-                   - Give clear, actionable advice
-                   - Ask relevant follow-up questions
-                7. Safety emphasis:
-                   - Highlight critical safety concerns
-                   - Recommend professional help when needed
-                   - Provide appropriate warnings
-
-                IMPORTANT:
-                - Stay focused on the vehicle issue
-                - Be specific to this make/model/year
-                - Avoid generic advice
-                - Prioritize safety
-                - Reference technical knowledge from context when available
+                enhanced_system_prompt = f"""You are a master automotive technician using the "Process of Elimination".
                 
+                VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
+
+                INSTRUCTIONS:
+                Analyze the symptoms and provided context. Return your answer in a strict, structured format offering 2-3 distinct solutions sorted by likelihood.
+                
+                REQUIRED OUTPUT FORMAT:
+                
+                **1. Most Likely Solution (High Confidence)**
+                *   **Why:** Brief explanation of why this is the probable cause.
+                *   **Action:** Step-by-step instructions on what to check or fix first.
+                
+                **2. Secondary Solution (If step 1 fails)**
+                *   **Why:** Alternative cause if the first fix doesn't work.
+                *   **Action:** Next diagnostic steps.
+                
+                **3. Professional Check (if applicable)**
+                *   **When to stop:** Critical safety warning or when to see a mechanic.
+
+                RULES:
+                - Be direct and actionable.
+                - Do NOT write a generic introductory paragraph. Start immediately with "1. Most Likely Solution".
+                - Use clear bullet points.
+                - If the issue is simple, you may only provide 1 or 2 solutions.
+                - SAFETY FIRST: If the issue is dangerous (brakes/fuel), put the Safety Warning first.
+
                 Current User Query: "{inputs['prompt']}"
                 """
+
 
                 llm_input = {
                     # "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
@@ -453,8 +439,10 @@ class ChatService:
         
         async def routing_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Route to appropriate processing chain based on intent"""
-            processing_path = await self._determine_processing_path(
-                inputs["prompt"], inputs.get("chat_history", [])
+            # This assumes intent is already provided in inputs from the Sandwich processor
+            intent = inputs.get("intent", "technical_question")
+            processing_path = self._determine_processing_path(
+                intent, inputs["prompt"]
             )
             
             logger.info(f"Routing to: {processing_path} processing")
@@ -497,61 +485,131 @@ Guidelines:
 5. Maintain conversation context
 6. For complex issues, recommend professional help
 7. Adapt your tone based on the conversation - be more technical for diagnosis, more conversational for greetings"""
+    # ==========Old Process Message Method=======
+    # async def process_message(
+    #     self,
+    #     session: ChatSession,
+    #     user_input: str,
+    #     image_url: Optional[str] = None,
+    #     vehicle: Optional[VehicleModel] = None
+    # ) -> Dict[str, Any]:
+    #     """
+    #     Process a user message through the complete chain
+        
+    #     Args:
+    #         session: Current chat session
+    #         user_input: User's message text
+    #         image_url: Optional image URL/path
+    #         vehicle: Optional vehicle information
+            
+    #     Returns:
+    #         Dictionary containing:
+    #         - response: Generated diagnosis/response
+    #         - updated_session: Updated chat session
+    #     """
+    #     try:
+    #         if image_url:
+    #             session.image_history.append(image_url)
+            
+    #         if vehicle:
+    #             session.vehicle_info = vehicle
 
+    #         # Prepare chain input
+    #         inputs = {
+    #             "prompt": user_input,
+    #             "image_url": image_url,
+    #             "vehicle": vehicle.model_dump() if vehicle else {},
+    #             "chat_history": session.chat_history
+    #         }
+            
+    #         # Process through chain
+    #         result = await self.chain.ainvoke(inputs)
+            
+    #         # Handle response
+    #         diagnosis = result.get("diagnosis_output", "")
+            
+    #         # Generate title if first message
+    #         if len(session.chat_history) <= 2 and not session.chat_title:
+    #             session.chat_title = await self.generate_chat_title(user_input)
+                
+    #         return {
+    #             "response": diagnosis,
+    #             "updated_session": session
+    #         }
+    #     except Exception as e:
+    #         logger.error(f"Message processing failed: {e}", exc_info=True)
+    #         raise
+    
+    
+    # ==========New Process Message Method========
     async def process_message(
         self,
         session: ChatSession,
-        user_input: str,
+        user_input_data: Dict[str, Any], # Changed from str to Dict
         image_url: Optional[str] = None,
         vehicle: Optional[VehicleModel] = None
     ) -> Dict[str, Any]:
         """
-        Process a user message through the complete chain
-        
         Args:
-            session: Current chat session
-            user_input: User's message text
-            image_url: Optional image URL/path
-            vehicle: Optional vehicle information
-            
-        Returns:
-            Dictionary containing:
-            - response: Generated diagnosis/response
-            - updated_session: Updated chat session
+            user_input_data: Result from Sandwich Step 1 
+                             {"english_translation", "intent", "detected_language", "original_input"}
         """
         try:
+            # 1. Update Session with Image/Vehicle
             if image_url:
                 session.image_history.append(image_url)
-            
             if vehicle:
                 session.vehicle_info = vehicle
 
-            # Prepare chain input
-            inputs = {
-                "prompt": user_input,
+            english_text = user_input_data["english_translation"]
+            intent = user_input_data["intent"]
+            detected_lang = user_input_data["detected_language"]
+
+            # 2. Determine Path (Step 2 Logic)
+            # Intent already determined by Sandwich Step 1, just route based on it
+            processing_path = self._determine_processing_path(intent, english_text)
+            
+            # 3. Prepare Inputs for the Brain (Step 2)
+            # IMPORTANT: We feed the BRAIN the ENGLISH text
+            chain_inputs = {
+                "prompt": english_text,  # The Brain sees English
                 "image_url": image_url,
                 "vehicle": vehicle.model_dump() if vehicle else {},
-                "chat_history": session.chat_history
+                "chat_history": session.chat_history,
+                "intent": intent # Pass intent explicitly
             }
             
-            # Process through chain
-            result = await self.chain.ainvoke(inputs)
+            # 4. Execute "The Brain" (Step 2)
+            if processing_path == "off_topic":
+                result = await self._create_off_topic_chain().ainvoke(chain_inputs)
+            elif processing_path == "simple":
+                result = await self._create_simple_response_chain().ainvoke(chain_inputs)
+            else:
+                result = await self._create_rag_chain().ainvoke(chain_inputs)
             
-            # Handle response
-            diagnosis = result.get("diagnosis_output", "")
+            english_response = result.get("diagnosis_output", "")
+
+            # 5. Translate Response (Step 3)
+            # The Sandwich closes here.
+            final_response = await self.sandwich.translate_output(
+                english_response, 
+                target_language=detected_lang
+            )
             
-            # Generate title if first message
+            # 6. Title Generation (if needed)
             if len(session.chat_history) <= 2 and not session.chat_title:
-                session.chat_title = await self.generate_chat_title(user_input)
+                session.chat_title = await self.generate_chat_title(english_text)
                 
             return {
-                "response": diagnosis,
-                "updated_session": session
+                "response": final_response, # Localized response
+                "english_response": english_response, # English version for debugging
+                "updated_session": session,
+                "detected_language": detected_lang
             }
+
         except Exception as e:
             logger.error(f"Message processing failed: {e}", exc_info=True)
             raise
-    
     async def generate_chat_title(self, first_message: str) -> str:
         """Generate a summary title for the chat based on the first message"""
         try:
