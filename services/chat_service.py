@@ -545,14 +545,14 @@ Guidelines:
     async def process_message(
         self,
         session: ChatSession,
-        user_input_data: Dict[str, Any], # Changed from str to Dict
+        user_input_data: Dict[str, Any], # Receives result from Sandwich Step 1
         image_url: Optional[str] = None,
         vehicle: Optional[VehicleModel] = None
     ) -> Dict[str, Any]:
         """
         Args:
             user_input_data: Result from Sandwich Step 1 
-                             {"english_translation", "intent", "detected_language", "original_input"}
+                             {"english_translation", "intent", "detected_language", ...}
         """
         try:
             # 1. Update Session with Image/Vehicle
@@ -561,22 +561,24 @@ Guidelines:
             if vehicle:
                 session.vehicle_info = vehicle
 
+            # 🔥 CRITICAL: Extract English Text for "The Brain"
             english_text = user_input_data["english_translation"]
+            # 🔥 CRITICAL: Extract Target Language (User's Preference) for "Output"
+            target_lang = user_input_data["detected_language"]
             intent = user_input_data["intent"]
-            detected_lang = user_input_data["detected_language"]
 
-            # 2. Determine Path (Step 2 Logic)
-            # Intent already determined by Sandwich Step 1, just route based on it
+            # 2. Determine Path using the ENGLISH text (Brain understands English best)
             processing_path = self._determine_processing_path(intent, english_text)
             
             # 3. Prepare Inputs for the Brain (Step 2)
-            # IMPORTANT: We feed the BRAIN the ENGLISH text
+            # IMPORTANT: We feed the BRAIN the ENGLISH text. 
+            # This guarantees the RAG chain finds English documents.
             chain_inputs = {
-                "prompt": english_text,  # The Brain sees English
+                "prompt": english_text,  
                 "image_url": image_url,
                 "vehicle": vehicle.model_dump() if vehicle else {},
                 "chat_history": session.chat_history,
-                "intent": intent # Pass intent explicitly
+                "intent": intent 
             }
             
             # 4. Execute "The Brain" (Step 2)
@@ -590,21 +592,21 @@ Guidelines:
             english_response = result.get("diagnosis_output", "")
 
             # 5. Translate Response (Step 3)
-            # The Sandwich closes here.
+            # The Sandwich closes here. Translates English Diagnostic -> User's Preferred Language
             final_response = await self.sandwich.translate_output(
                 english_response, 
-                target_language=detected_lang
+                target_language=target_lang
             )
             
-            # 6. Title Generation (if needed)
+            # 6. Title Generation (using English text for better titles)
             if len(session.chat_history) <= 2 and not session.chat_title:
                 session.chat_title = await self.generate_chat_title(english_text)
                 
             return {
-                "response": final_response, # Localized response
-                "english_response": english_response, # English version for debugging
+                "response": final_response,        # Localized response (Urdu/Hindi/etc)
+                "english_response": english_response, # English version
                 "updated_session": session,
-                "detected_language": detected_lang
+                "detected_language": target_lang
             }
 
         except Exception as e:
