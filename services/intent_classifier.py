@@ -321,7 +321,8 @@ class SandwichProcessor:
             
             2. **TRANSLATE FOR SEARCH**: 
                - Translate non-English input to technical English.
-            
+                - **PRESERVE STYLE INSTRUCTIONS**: If the user asks for "short answer", "details", "steps", or "explanation", **INCLUDE THAT IN THE TRANSLATION**.
+               - Example: "Gari start ni ho rhi, jaldi batao" -> "Car is not starting, tell me quickly." (Do NOT just say "Car not starting").
             3. **Classify Intent (CHOOSE CAREFULLY)**:
                - "technical_question": Problems, repairs, maintenance, specs (e.g., "My car won't start", "How to change oil").
                - "vehicle_diagnosis": Symptoms, weird noises, leaks.

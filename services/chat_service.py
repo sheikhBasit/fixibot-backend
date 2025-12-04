@@ -56,35 +56,42 @@ class ChatService:
 
     # In services/chat_service.py
 
+    # In services/chat_service.py
+
     def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag", "command", "off_topic"]:
-        """Determine the processing path based on user intent"""
-        
         logger.info(f"Routing logic -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
 
-        # --- FIX 1: PRIORITY RULE FOR IMAGES ---
-        # If an image is present, we MUST use the RAG/Diagnostic chain 
-        # because the 'simple' chain cannot see images.
+        # 1. FORCE RAG for Images
         if has_image:
             return "rag"
 
-        # 1. Check for off-topic or inappropriate content
+        # 2. Check for Off-topic
         if self._is_off_topic_or_inappropriate(user_input):
             return "off_topic"
+
+        # --- FIX START: Detect Context Modifications (Stop the Restart) ---
+        # If user asks to change the answer style, send it to the BRAIN (RAG), not the Greeter.
+        modification_keywords = [
+            "shorter", "brief", "too long", "summarize", "detail", "explain", 
+            "elaborate", "again", "repeat", "what?", "didn't understand", "simplify"
+        ]
+        if any(word in user_input.lower() for word in modification_keywords):
+            return "rag" # The Brain handles "Make it shorter", not the Greeter
+        # --- FIX END ---
         
-        # 2. Handle conversational intents
+        # 3. Handle Conversational Intents
         if intent in ["greeting", "small_talk", "other"]:
             return "simple"
 
-        # 3. Handle Commands
+        # 4. Handle Commands (Vehicle Actions vs Conversational Commands)
         if intent == "command":
-            return "command"
+            # Double check if it's a vehicle command or a chat command
+            if any(word in user_input.lower() for word in ["turn", "switch", "open", "close", "start", "stop"]):
+                return "command"
+            return "rag" # Treat ambiguous commands as technical requests
 
-        # 4. Handle Technical Questions
-        if intent in ["technical_question", "vehicle_diagnosis"]:
-            return "rag"
-
-        # 5. Default Fallback
-        return "simple"
+        # 5. Technical Questions
+        return "rag"
     
     def _create_simple_response_chain(self) -> RunnableSerializable:
         """Chain for simple responses (greetings, small talk)"""
@@ -283,11 +290,25 @@ class ChatService:
                 #     filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 # )
 
+                # 3. Setup Filter (Try specific brand first)
+                search_filter = {"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
+                
+                # 4. First Search Attempt (Specific)
                 docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
-                    query_embedding,  # Pass the computed embedding here
+                    query_embedding,
                     k=3,
-                    filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
+                    filter=search_filter
                 )
+
+                # --- FIX START: FALLBACK SEARCH ---
+                # If no results found with filter, try again WITHOUT filter
+                if not docs_and_scores and search_filter:
+                    logger.info("No documents found with brand filter. Retrying without filter.")
+                    docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
+                        query_embedding,
+                        k=3,
+                        filter=None  # Remove the constraint
+                    )
                 # Debug: raw docs_and_scores
                 print("\n=== Raw docs_and_scores ===")
                 print(docs_and_scores)
@@ -370,6 +391,7 @@ class ChatService:
                     "fuel_type": vehicle.get("fuel_type", "Unknown"),
                     "engine_type": vehicle.get("engine_type", "Unknown")
                 }
+                user_prompt = inputs['prompt']
                 
                 # Convert ChatMessage objects to dict for the LLM
                 chat_history_dicts = []
@@ -378,6 +400,56 @@ class ChatService:
                         chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append(msg)
+                user_prompt_lower = user_prompt.lower()
+
+                # Keywords likely to appear in translations for "Short/Concise"
+                concise_keywords = [
+                    "short", "brief", "summar", "quick", "concise", "simple", 
+                    "fast", "point", "few words", "nutshell", "small", "precis",
+                    "less", "little"
+                ]
+
+                # Keywords likely to appear in translations for "Detailed/Long"
+                detailed_keywords = [
+                    "detail", "explain", "elaborate", "why", "more info", 
+                    "long", "comprehens", "full", "complete", "depth", 
+                    "clarify", "description", "whole", "all"
+                ]
+                exact_keywords = ["exact", "verbatim", "copy", "quote", "say exactly", "repeat", "only say"]
+                # Check for Detail first
+                is_detailed_request = any(w in user_prompt_lower for w in detailed_keywords)
+                # Check for Concise specifically (to override defaults if needed)
+                is_concise_request = any(w in user_prompt_lower for w in concise_keywords)
+                is_exact = any(w in user_prompt_lower for w in exact_keywords)
+                if is_exact:
+                    # OPTION A: User wants exact/custom format -> NO SYSTEM OVERRIDE
+                    # We leave instructions empty or tell AI to obey user strictly
+                    format_instructions = """
+                    STYLE: **OBEY USER INSTRUCTIONS**.
+                    - The user has requested a specific format (e.g., exact words).
+                    - Ignore standard style templates.
+                    - Follow the User Query instructions precisely.
+                    """
+                elif is_detailed_request:
+                    # OPTION A: Detailed (Only if asked)
+                    format_instructions = """
+                    STYLE: **DETAILED AND EDUCATIONAL**. 
+                    - Provide Step-by-Step instructions.
+                    - Explain 'Why' this issue is happening.
+                    - Include potential costs or tools needed.
+                    - Be thorough.
+                    """
+                else:
+                    # OPTION B: Concise Steps (THE DEFAULT)
+                    format_instructions = """
+                    STYLE: **CONCISE AND SURGICAL**.
+                    - Use the 'Step 1, Step 2' format.
+                    - **Maximum 15 words per step.**
+                    - Direct actions only (e.g., "Check battery voltage," not "You should go ahead and check...").
+                    - NO introductory text (No "Here is what to do...").
+                    - NO concluding text (No "Hope this helps").
+                    - If Step 1 fixes it, stop there.
+                    """
                 enhanced_system_prompt = f"""
                 You are a skilled automotive technician using logical troubleshooting.
 
@@ -388,8 +460,9 @@ LANGUAGE CONSTRAINT (VIOLATION WILL CAUSE SYSTEM FAILURE):
                 - The chat history contains Urdu/Local languages. **IGNORE THEM**.
                 - Do NOT reply in the user's language. 
                 - If you output Urdu/Arabic script here, the system will crash.
+                {format_instructions}
 INSTRUCTIONS:
-Read the problem description carefully. Provide practical, step-by-step solutions. Do not include unnecessary explanation or speculative language.
+Read the problem description carefully. Provide the solution immediately based on the requested style. Do not include unnecessary explanation or speculative language.
 
 REPLY FORMAT:
 
