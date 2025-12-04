@@ -279,7 +279,20 @@ class SandwichProcessor:
             "greeting", "small_talk", "technical_question", 
             "command", "vehicle_diagnosis", "other"
         ]
-
+    async def _quick_translate(self, text: str) -> str:
+        """Helper to just translate text to English without JSON formatting overhead"""
+        try:
+            response = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "Translate the following text to technical English. Output ONLY the translation, nothing else."},
+                    {"role": "user", "content": text}
+                ],
+                temperature=0.1
+            )
+            return response.choices[0].message.content.strip()
+        except:
+            return text
     async def process_input(self, user_text: str, language_hint: Optional[str] = None, chat_history: list = None) -> Dict[str, Any]:
         """
         Step 1: Translate to English + Classify Intent + Detect Language
@@ -292,6 +305,8 @@ class SandwichProcessor:
                 history_context = "\n".join([f"{getattr(msg, 'role', 'user')}: {getattr(msg, 'content', '')}" for msg in last_msgs])
 
             # 🔥 UPDATED PROMPT: Enforces translation for RAG and prioritizes language_hint
+            # In SandwichProcessor.process_input
+
             system_prompt = f"""
             You are the 'Input Processor' for an automotive AI. 
             
@@ -301,21 +316,25 @@ class SandwichProcessor:
             
             YOUR TASKS:
             1. **Identify Output Language**: 
-               - If 'Language Hint' is provided (e.g., 'Urdu'), use IT as the 'detected_language' (This represents the user's preferred output language, even if they typed in English).
-               - If no hint, detect the language from the text.
+               - If 'Language Hint' is provided, use IT.
+               - Otherwise, detect from text.
             
-            2. **TRANSLATE FOR SEARCH (CRITICAL)**: 
-               - The technical database is in ENGLISH. 
-               - If the User Input is NOT English (e.g., Urdu, Hindi, Punjabi), you **MUST** translate it into clear, Technical English.
-               - Convert terms like "Gari start ni ho rhi" -> "Car is not starting".
-               - If the User Input is already English, the translation is the same as the input.
+            2. **TRANSLATE FOR SEARCH**: 
+               - Translate non-English input to technical English.
             
-            3. **Classify Intent**: Choose one of: {self.intent_categories}.
+            3. **Classify Intent (CHOOSE CAREFULLY)**:
+               - "technical_question": Problems, repairs, maintenance, specs (e.g., "My car won't start", "How to change oil").
+               - "vehicle_diagnosis": Symptoms, weird noises, leaks.
+               - "command": **STRICTLY for Vehicle Actions** (e.g., "Turn on AC", "Unlock doors", "Start engine"). 
+                 -> DO NOT use 'command' for conversational requests like "Stop talking" or "Don't be dramatic".
+               - "greeting": Hello, Hi, Salam.
+               - "small_talk": How are you, who are you.
+               - "other": Feedback, complaints, random comments (e.g., "Don't be dramatic", "You are wrong", "Okay", "Thanks").
             
             OUTPUT FORMAT (JSON ONLY):
             {{
-                "detected_language": "string (The language user wants response in)",
-                "english_translation": "string (This MUST be in English for the search to work)",
+                "detected_language": "string",
+                "english_translation": "string",
                 "intent": "string"
             }}
             """
@@ -334,26 +353,26 @@ class SandwichProcessor:
             )
             
             result = json.loads(response.choices[0].message.content)
-            
-            # Fallback defaults if JSON is partial
+
             return {
                 "detected_language": result.get("detected_language", language_hint or "English"),
-                "english_translation": result.get("english_translation", user_text),
+                # Fix: Ensure we don't accidentally fallback to user_text inside the try block if key is missing
+                "english_translation": result.get("english_translation") or await self._quick_translate(user_text),
                 "intent": result.get("intent", "technical_question").lower(),
                 "original_input": user_text
             }
 
         except Exception as e:
             logger.error(f"Sandwich Input Processing failed: {e}")
-            # Fallback: Assume English, Intent unknown
+        
+            fallback_translation = await self._quick_translate(user_text)
+            
             return {
                 "detected_language": language_hint or "unknown",
-                "english_translation": user_text,
-                "intent": "technical_question",
+                "english_translation": fallback_translation, # Use the forced translation
+                "intent": "technical_question", # Default safe intent
                 "original_input": user_text
             }
-
-    # ... [Rest of the class (translate_output, etc.) remains the same] ...
     async def translate_output(self, english_response: str, target_language: str) -> str:
         """
         Step 3: Translate the Brain's response back to the user's language.

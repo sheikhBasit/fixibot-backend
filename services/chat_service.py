@@ -31,7 +31,11 @@ class ChatService:
 
          # Use SandwichProcessor instead of IntentClassifier
         self.sandwich = get_sandwich_processor(request)
-    
+    def _contains_non_english_script(self, text: str) -> bool:
+        """Returns True if text contains significant non-Latin characters (like Urdu/Arabic)"""
+        non_ascii_count = sum(1 for c in text if ord(c) > 127)
+        # If more than 10% of the text is non-ASCII (Urdu), it failed.
+        return len(text) > 0 and (non_ascii_count / len(text)) > 0.1
     def _is_off_topic_or_inappropriate(self, text: str) -> bool:
         """Check if the message is off-topic or inappropriate"""
         # List of non-automotive topics to redirect
@@ -50,41 +54,47 @@ class ChatService:
             
         return False
 
-    def _determine_processing_path(self, intent: str, user_input: str) -> Literal["simple", "rag", "command", "off_topic"]:
+    # In services/chat_service.py
+
+    def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag", "command", "off_topic"]:
         """Determine the processing path based on user intent"""
-        # Intent is already determined by Sandwich Step 1
-        logger.info(f"Detected intent: {intent} for message: '{user_input}'")
         
-        # Check for off-topic or inappropriate content first
+        logger.info(f"Routing logic -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
+
+        # --- FIX 1: PRIORITY RULE FOR IMAGES ---
+        # If an image is present, we MUST use the RAG/Diagnostic chain 
+        # because the 'simple' chain cannot see images.
+        if has_image:
+            return "rag"
+
+        # 1. Check for off-topic or inappropriate content
         if self._is_off_topic_or_inappropriate(user_input):
             return "off_topic"
         
-        # More specific intent classification
-        if any(word.lower() in user_input.lower() for word in ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"]) and len(user_input.split()) <= 4:
+        # 2. Handle conversational intents
+        if intent in ["greeting", "small_talk", "other"]:
             return "simple"
-        elif any(word.lower() in user_input.lower() for word in ["bye", "goodbye", "thanks", "thank you"]) and len(user_input.split()) <= 4:
-            return "simple"
-        elif any(keyword in user_input.lower() for keyword in ["fix", "repair", "broken", "not working", "problem", "issue", "help", "diagnose", "check", "car", "vehicle", "engine", "brake", "tire", "wheel", "battery", "oil", "maintenance"]):
-            return "rag"  # Technical questions get full diagnosis
-        elif intent in ["technical_question", "vehicle_diagnosis"]:
-            return "rag"
-        elif intent == "command":
+
+        # 3. Handle Commands
+        if intent == "command":
             return "command"
-        else:
-            # Check if the message is very short or unclear
-            if len(user_input.split()) <= 2:
-                return "off_topic"
-            return "rag"  # Default to RAG for unknown intents
+
+        # 4. Handle Technical Questions
+        if intent in ["technical_question", "vehicle_diagnosis"]:
+            return "rag"
+
+        # 5. Default Fallback
+        return "simple"
     
     def _create_simple_response_chain(self) -> RunnableSerializable:
         """Chain for simple responses (greetings, small talk)"""
         async def simple_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate simple conversational responses"""
             try:
-                # Get intent from inputs (provided by Sandwich processor)
+                # Get intent from inputs
                 intent = inputs.get("intent", "other")
                 
-                # First try to get a predefined response
+                # 1. Try predefined static responses first
                 predefined_response = SimpleResponseGenerator.get_response(
                     intent,
                     inputs["prompt"]
@@ -93,53 +103,67 @@ class ChatService:
                 if predefined_response:
                     return {**inputs, "diagnosis_output": predefined_response}
                 
-                # Fallback to LLM for more complex simple responses
-                # Analyze chat history for context
-                recent_messages = inputs.get("chat_history", [])[-3:]
+                # 2. Prepare History: Convert Pydantic objects to Dicts
+                # --- FIX START ---
+                raw_history = inputs.get("chat_history", [])
+                chat_history_dicts = []
+                for msg in raw_history:
+                    if hasattr(msg, 'model_dump'):
+                        # Pydantic v2
+                        chat_history_dicts.append(msg.model_dump())
+                    elif hasattr(msg, 'dict'):
+                        # Pydantic v1
+                        chat_history_dicts.append(msg.dict())
+                    elif isinstance(msg, dict):
+                        chat_history_dicts.append(msg)
+                    else:
+                        # Fallback for strings or unknown types
+                        chat_history_dicts.append({"role": "user", "content": str(msg)})
+                # --- FIX END ---
+
+                # 3. Analyze context for off-topic check
+                # (Use raw_history here since off_topic check handles objects)
+                recent_messages = raw_history[-3:]
                 off_topic_messages = sum(1 for msg in recent_messages 
                                        if self._is_off_topic_or_inappropriate(msg.content if hasattr(msg, 'content') else str(msg)))
 
+                # In services/chat_service.py
+
                 prompt = f"""
                 User message: "{inputs['prompt']}"
-                Recent chat history shows {'several off-topic messages' if off_topic_messages > 1 else 'normal conversation'}.
-                
-                You are a professional automotive technician. Keep your responses natural and conversational while maintaining expertise.
-                
-                Guidelines:
-                1. Keep responses brief and natural
-                2. Be friendly and approachable
-                3. Focus on automotive topics naturally
-                4. Redirect off-topic conversations smoothly
-                5. Maintain professional expertise
-                
-                Style Requirements:
-                - Be conversational but professional
-                - Avoid repetitive phrases
-                - Don't mention vehicle specs unless asked
-                - Keep technical terms simple unless needed
-                - Use natural transitions in conversation
-                
-                Examples:
-                - "Hello! I'm your automotive specialist. What vehicle concerns can I address for you today?"
-                - "I'm here to help with any vehicle-related questions. What seems to be the issue with your car?"
-                - "While I appreciate the conversation, I'm specifically trained for automotive diagnostics. How can I help with your vehicle today?"
-                - "Let's focus on your vehicle needs. What automotive concerns would you like me to address?"
+                Detected Intent: "{intent}"
+
+                You are a professional automotive technician.
+                The user is NOT asking a technical question.
+
+                Instructions:
+                1. If the user is critical (e.g., "Don't be dramatic"), apologize professionally.
+                2. If it's a greeting, greet back warmly.
+                3. Keep it SHORT and conversational.
+
+                !!! CRITICAL LANGUAGE RULE !!!
+                You MUST write your response in **ENGLISH ONLY**. 
+                Do NOT write in Urdu or the user's language. 
+                Your output will be translated later. If you write in Urdu now, the system will break.
                 """
                 
-                response = await self.diagnostic_agent.ainvoke({
-                    "system_prompt": "You are a friendly vehicle mechanic assistant. Engage in natural conversation. Keep responses brief for greetings and small talk.",
+                # 4. Call the Agent with the DICTIONARY history
+                response = self.diagnostic_agent.invoke({
+                    "system_prompt": "You are a friendly vehicle mechanic assistant. Engage in natural conversation.",
                     "input": prompt,
-                    "chat_history": inputs.get("chat_history", []),
+                    "chat_history": chat_history_dicts,  # <--- PASSING DICTS NOW
                     "is_simple_response": True
                 })
                 
                 return {**inputs, "diagnosis_output": response}
+
             except Exception as e:
-                logger.error(f"Simple response failed: {e}")
-                return {**inputs, "diagnosis_output": "Hello! How can I help with your vehicle today?"}
+                logger.error(f"Simple response failed: {e}", exc_info=True)
+                # This is the fallback message you are currently seeing
+                return {**inputs, "diagnosis_output": "I apologize, I missed that. How can I help with your vehicle?"}
         
         return RunnableLambda(simple_response)
-    
+
     def _create_rag_chain(self) -> RunnableSerializable:
         """Create the RAG processing chain"""
         async def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -233,10 +257,16 @@ class ChatService:
                 vehicle = inputs.get("vehicle", {})
                 prompt = inputs["prompt"]
                 chat_history = inputs.get("chat_history", [])
-
+                # 2. Prepare the Search Query (STRICTLY ENGLISH)
+                # inputs["prompt"] is already translated to English by your Sandwich Processor
+                search_query = str(inputs["prompt"]) 
+                
+                # 3. Embed ONLY the English translation
+                # This ensures the vector aligns perfectly with your English Vector DB
+                query_embedding = embed_text(search_query)
                 # Get last 4 messages for context
                 history_context = "\n".join(
-                [str(msg.content) for msg in chat_history[-4:] if hasattr(msg, 'content') and msg.content is not None]
+                [str(msg.content) for msg in chat_history[-2:] if hasattr(msg, 'content') and msg.content is not None]
                 )
 
                 prompt = str(inputs["prompt"])  # ensure prompt is string
@@ -329,7 +359,7 @@ class ChatService:
                     "retrieved_context": []
                 }
 
-        def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:
                 vehicle = inputs.get("vehicle", {})
@@ -348,41 +378,45 @@ class ChatService:
                         chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append(msg)
-                enhanced_system_prompt = f"""You are a master automotive technician using the "Process of Elimination".
-                
-                VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
+                enhanced_system_prompt = f"""
+                You are a skilled automotive technician using logical troubleshooting.
 
-                INSTRUCTIONS:
-                Analyze the symptoms and provided context. Return your answer in a strict, structured format offering 2-3 distinct solutions sorted by likelihood.
-                
-                REQUIRED OUTPUT FORMAT:
-                
-                **1. Most Likely Solution (High Confidence)**
-                *   **Why:** Brief explanation of why this is the probable cause.
-                *   **Action:** Step-by-step instructions on what to check or fix first.
-                
-                **2. Secondary Solution (If step 1 fails)**
-                *   **Why:** Alternative cause if the first fix doesn't work.
-                *   **Action:** Next diagnostic steps.
-                
-                **3. Professional Check (if applicable)**
-                *   **When to stop:** Critical safety warning or when to see a mechanic.
+VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
 
-                RULES:
-                - Be direct and actionable.
-                - Do NOT write a generic introductory paragraph. Start immediately with "1. Most Likely Solution".
-                - Use clear bullet points.
-                - If the issue is simple, you may only provide 1 or 2 solutions.
-                - SAFETY FIRST: If the issue is dangerous (brakes/fuel), put the Safety Warning first.
+LANGUAGE CONSTRAINT (VIOLATION WILL CAUSE SYSTEM FAILURE):
+                - **OUTPUT MUST BE IN ENGLISH ONLY**.
+                - The chat history contains Urdu/Local languages. **IGNORE THEM**.
+                - Do NOT reply in the user's language. 
+                - If you output Urdu/Arabic script here, the system will crash.
+INSTRUCTIONS:
+Read the problem description carefully. Provide practical, step-by-step solutions. Do not include unnecessary explanation or speculative language.
 
-                Current User Query: "{inputs['prompt']}"
+REPLY FORMAT:
+
+Step 1:
+- Describe the first, simplest test or fix.
+
+Step 2:
+- If Step 1 does not solve the issue, describe the next test or fix.
+
+Step 3 (if needed):
+- Describe when to stop DIY and consult a qualified mechanic (especially for safety-critical issues).
+
+GUIDELINES:
+- Be clear, direct and action oriented.  
+- No “Why” or “Most Likely Solution” headings — just give steps.  
+- No extra paragraphs or preamble. Begin immediately with “Step 1:”.  
+- Provide maximum 2–3 steps unless the issue demands more.  
+- Always prioritize safety: mention hazards early and advise professional help when required.
+
+Current User Query: "{inputs['prompt']}""
                 """
 
 
                 llm_input = {
                     # "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
                     "system_prompt": enhanced_system_prompt,
-                    "input": inputs["prompt"],
+                    "input": f"{inputs['prompt']}\n\n(REMINDER: Respond in technical English ONLY)",
                     "context": f"""
                     Image Analysis:
                     {inputs.get('context_1', 'No image analysis available')}
@@ -398,6 +432,11 @@ class ChatService:
                 }
                 
                 response = self.diagnostic_agent.invoke(llm_input)
+                if self._contains_non_english_script(response):
+                    logger.warning("Brain failed to speak English. Forcing translation.")
+                    # Force it back to English
+                    response = await self.sandwich._quick_translate(response) # Reuse your quick translate tool
+
                 return {**inputs, "diagnosis_output": response}
             except Exception as e:
                 logger.error(f"Diagnostic failed: {e}", exc_info=True)
@@ -568,8 +607,11 @@ Guidelines:
             intent = user_input_data["intent"]
 
             # 2. Determine Path using the ENGLISH text (Brain understands English best)
-            processing_path = self._determine_processing_path(intent, english_text)
-            
+            processing_path = self._determine_processing_path(
+                intent, 
+                english_text, 
+                has_image=bool(image_url) 
+            )
             # 3. Prepare Inputs for the Brain (Step 2)
             # IMPORTANT: We feed the BRAIN the ENGLISH text. 
             # This guarantees the RAG chain finds English documents.
