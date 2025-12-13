@@ -1,432 +1,465 @@
 """
-Test Script for RAG Evaluation System
-Run this script to test your RAG system with sample or real data
-
-USAGE:
-    python tests/test_rag_evaluation.py --mode basic
-    python tests/test_rag_evaluation.py --mode comprehensive --data-file your_data.json
-    python tests/test_rag_evaluation.py --mode template
-    python tests/test_rag_evaluation.py --mode compare --compare-files file1.csv file2.csv
+RAG Evaluation System for AutoAssist
+Connects to the REAL ChatService to evaluate performance.
+Bypasses the "Sandwich" translation layers to test the Core Logic (RAG + Reasoning) directly.
 """
 
 import asyncio
 import json
 import time
-from pathlib import Path
-from typing import List, Dict
-import pandas as pd
 import sys
-sys.path.append(str(Path(__file__).parent.parent))
+import logging
+import pickle
+import os
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import pandas as pd
+from dataclasses import dataclass
+from dotenv import load_dotenv
 
-# Import evaluation modules
-from services.rag_evaluator import EvaluationData, RAGEvaluator
+# --- 1. LOAD ENV VARS (Critical for Groq API) ---
+load_dotenv() 
 
+# --- 2. PATH SETUP ---
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent 
+sys.path.append(str(project_root))
 
-class TestDataGenerator:
-    """Generate test data for evaluation"""
+# --- APP IMPORTS ---
+try:
+    from fastapi import Request
+    from services.chat_service import ChatService
+    from models.chat import ChatSession
+    from models.vehicle import VehicleModel
+    # Import specific embedding function
+    from services.multimodal_embeddings import embed_text
+    # Import Agent Creators
+    from services.diagnostic_agent import create_diagnostic_agent
+    from services.intent_classifier import SandwichProcessor
+    from services.image_analyzer import ImageAnalyzer
+except ImportError as e:
+    print(f"❌ Import Error: {e}")
+    sys.exit(1)
+
+# --- ML/VECTOR IMPORTS ---
+from langchain_community.vectorstores import FAISS
+from langchain_core.embeddings import Embeddings
+
+# --- METRIC LIBRARIES ---
+import numpy as np
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from rouge_score import rouge_scorer
+
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("RAG_Eval")
+
+# --- GLOBAL CHECK FOR BERTSCORE ---
+try:
+    from bert_score import score as bert_score
+    BERTSCORE_AVAILABLE = True
+except ImportError:
+    BERTSCORE_AVAILABLE = False
+    print("⚠️  bert-score library not found. Semantic similarity will be skipped.")
+
+@dataclass
+class EvaluationData:
+    """Data structure for a single evaluation instance"""
+    query_id: str
+    query_text: str
+    relevant_doc_ids: List[str] # Ground Truth: List of Doc IDs (source names)
+    reference_text: str         # Ground Truth: The ideal answer
     
-    @staticmethod
-    def create_sample_test_data() -> List[EvaluationData]:
-        """
-        Create sample test data for initial testing.
+    # Fields to be filled by the AI during testing
+    retrieved_doc_ids: List[str] = None
+    similarity_scores: List[float] = None
+    generated_text: str = ""
+    start_time: float = 0.0
+    end_time: float = 0.0
+    
+    def __post_init__(self):
+        if self.retrieved_doc_ids is None: self.retrieved_doc_ids = []
+        if self.similarity_scores is None: self.similarity_scores = []
+
+# --- MOCKING CLASSES ---
+class MockAppState:
+    """Simulates FastAPI app.state to hold ALL dependencies"""
+    def __init__(self, vectorstore, image_store, diagnostic_agent, image_analyzer, sandwich_processor):
+        self.vectorstore = vectorstore
+        self.image_data_store = image_store
+        self.diagnostic_agent = diagnostic_agent
+        self.image_analyzer = image_analyzer
+        self.sandwich_processor = sandwich_processor
+
+class MockApp:
+    def __init__(self, state):
+        self.state = state
+
+class FunctionalEmbeddings(Embeddings):
+    """Wrapper to make your project's embed_text function compatible with LangChain"""
+    def __init__(self, embed_func):
+        self.func = embed_func
         
-        This now includes:
-        1. In-Domain (Related): Real-life questions related to the bot's purpose (vehicles).
-        2. Out-of-Domain (Not Related): Questions the bot should gracefully decline.
-        3. Chit-Chat: Simple greetings to test conversational robustness.
-        """
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        # Handle numpy array return type
+        return [self.func(t).tolist() for t in texts] 
         
-        # 1. In-Domain (Related) Test Cases
-        in_domain_cases = [
-            {
-                "query_id": "test_001",
-                "query_text": "Why is my car engine overheating?",
-                "retrieved_doc_ids": ["manual_p45", "manual_p67", "manual_p12"],
-                "relevant_doc_ids": ["manual_p45", "manual_p67"],
-                "similarity_scores": [0.92, 0.85, 0.71],
-                "generated_text": "Engine overheating can be caused by low coolant levels, a faulty thermostat, or a damaged water pump. First, check your coolant reservoir and ensure it's at the proper level.",
-                "reference_text": "Common causes of engine overheating include insufficient coolant, malfunctioning thermostat, or water pump failure. Check coolant level first.",
-                "start_time": time.time(),
-                "end_time": time.time() + 1.8
-            },
-            {
-                "query_id": "test_002",
-                "query_text": "How do I change my brake pads?",
-                "retrieved_doc_ids": ["manual_p89", "manual_p90", "manual_p88"],
-                "relevant_doc_ids": ["manual_p89", "manual_p90", "manual_p91"],
-                "similarity_scores": [0.95, 0.93, 0.88],
-                "generated_text": "To change brake pads: 1) Safely lift the vehicle. 2) Remove the wheel. 3) Remove the caliper and slide out pads. 4) Install new pads. 5) Reassemble.",
-                "reference_text": "Brake pad replacement: Lift vehicle, remove wheel, detach caliper, replace pads, compress piston, reinstall.",
-                "start_time": time.time(),
-                "end_time": time.time() + 2.1
-            },
-            {
-                "query_id": "test_003",
-                "query_text": "What does the check engine light mean?",
-                "retrieved_doc_ids": ["manual_p120", "manual_p34", "manual_p121"],
-                "relevant_doc_ids": ["manual_p120", "manual_p121"],
-                "similarity_scores": [0.88, 0.76, 0.72],
-                "generated_text": "The check engine light indicates a potential issue with your engine or emissions system. Use an OBD-II scanner to read the diagnostic code.",
-                "reference_text": "Check engine light signals engine/emissions problems. Use OBD-II scanner for diagnostic codes.",
-                "start_time": time.time(),
-                "end_time": time.time() + 1.5
-            },
-            {
-                "query_id": "test_004",
-                "query_text": "My car won't start, what should I check?",
-                "retrieved_doc_ids": ["manual_p23", "manual_p24", "manual_p56"],
-                "relevant_doc_ids": ["manual_p23", "manual_p24", "manual_p25"],
-                "similarity_scores": [0.91, 0.87, 0.69],
-                "generated_text": "Check: 1) Dead battery - try jump starting. 2) Bad starter motor. 3) Empty fuel tank. 4) Faulty ignition switch. Start with the battery.",
-                "reference_text": "No-start causes: dead battery, faulty starter, empty fuel, bad ignition. Check battery first.",
-                "start_time": time.time(),
-                "end_time": time.time() + 1.9
-            },
-            {
-                "query_id": "test_005",
-                "query_text": "How often should I change my oil?",
-                "retrieved_doc_ids": ["manual_p15", "manual_p16", "manual_p78"],
-                "relevant_doc_ids": ["manual_p15", "manual_p16"],
-                "similarity_scores": [0.94, 0.91, 0.65],
-                "generated_text": "Oil change intervals: 5,000-7,500 miles with conventional oil, or 7,500-10,000 miles with synthetic oil. Check your owner's manual for specific recommendations.",
-                "reference_text": "Oil changes: 5,000-7,500 miles (conventional), 7,500-10,000 miles (synthetic). Consult manual.",
-                "start_time": time.time(),
-                "end_time": time.time() + 1.6
-            }
+    def embed_query(self, text: str) -> List[float]:
+        return self.func(text).tolist()
+
+class RealSystemEvaluator:
+    def __init__(self):
+        print("🔧 Initializing Real Chat Service for Evaluation...")
+        
+        # Check API Key
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            print("  ❌ CRITICAL: GROQ_API_KEY not found in environment variables.")
+            sys.exit(1)
+
+        # --- 1. LOCATE CACHE DIRECTORY ---
+        potential_paths = [
+            project_root / ".vector_cache",
+            project_root / "src" / ".vector_cache",
+            Path(".vector_cache")
         ]
         
-        # --- NEWLY ADDED ---
-        # 2. Out-of-Domain (Not Related) Test Cases
-        #    These test if the bot correctly identifies and declines to answer
-        #    questions outside its expertise.
-        out_of_domain_cases = [
-            {
-                "query_id": "ood_001",
-                "query_text": "How do I bake a chocolate cake?",
-                "retrieved_doc_ids": [], # Ideally, no relevant docs are retrieved
-                "relevant_doc_ids": [],
-                "similarity_scores": [],
-                "generated_text": "I'm sorry, I am a vehicle assistant and cannot help with cooking recipes.", # This is a good, expected response
-                "reference_text": "I am unable to provide information on that topic. I can only assist with vehicle-related questions.", # This is the "ground truth" refusal
-                "start_time": time.time(),
-                "end_time": time.time() + 1.1
-            },
-            {
-                "query_id": "ood_002",
-                "query_text": "What is the capital of France?",
-                "retrieved_doc_ids": [], # It's possible a spurious doc is retrieved, e.g., about "French cars"
-                "relevant_doc_ids": [], # But no doc is *actually* relevant
-                "similarity_scores": [],
-                "generated_text": "My apologies, but that question is outside of my expertise. I specialize in vehicle maintenance and repair.",
-                "reference_text": "I do not have information about geography. My purpose is to help with vehicle questions.",
-                "start_time": time.time(),
-                "end_time": time.time() + 1.3
-            }
-        ]
+        cache_dir = None
+        for p in potential_paths:
+            if p.exists():
+                cache_dir = p
+                print(f"  📂 Found cache directory at: {cache_dir}")
+                break
+        
+        if not cache_dir:
+            print(f"  ❌ CRITICAL: Could not find .vector_cache directory.")
+            sys.exit(1)
 
-        # 3. Chit-Chat Test Cases
-        #    These test basic conversational ability.
-        chit_chat_cases = [
-            {
-                "query_id": "chat_001",
-                "query_text": "Hello, how are you?",
-                "retrieved_doc_ids": [],
-                "relevant_doc_ids": [],
-                "similarity_scores": [],
-                "generated_text": "Hello! I'm a bot, but I'm ready to help with your vehicle questions.",
-                "reference_text": "Hello! How can I assist you with your vehicle today?",
-                "start_time": time.time(),
-                "end_time": time.time() + 0.9
+        # --- 2. FIND FAISS INDEX ---
+        db_path = None
+        index_name = "index"
+        
+        # Look for any file ending in .faiss
+        faiss_files = list(cache_dir.glob("*.faiss"))
+        if not faiss_files:
+            # Check subdirectories if flat structure fails
+            faiss_files = list(cache_dir.glob("*/*.faiss"))
+            
+        if not faiss_files:
+            print(f"  ❌ CRITICAL: Found cache folder {cache_dir} but NO .faiss files inside.")
+            sys.exit(1)
+            
+        target_file = faiss_files[0]
+        db_path = target_file.parent
+        index_name = target_file.stem # Filename without extension
+        
+        print(f"  🔹 Found Index File: {target_file.name}")
+
+        try:
+            # --- 3. LOAD RESOURCES ---
+            embedding_wrapper = FunctionalEmbeddings(embed_text)
+            
+            vectorstore = FAISS.load_local(
+                str(db_path), 
+                embeddings=embedding_wrapper,
+                allow_dangerous_deserialization=True,
+                index_name=index_name
+            )
+            print("  ✅ Vectorstore loaded successfully.")
+            
+            image_store = {}
+            # Try to match the index name pattern for images (e.g. name_images.pkl)
+            image_files = list(db_path.glob("*_images.pkl"))
+            if image_files:
+                image_pkl_path = image_files[0]
+                with open(image_pkl_path, "rb") as f:
+                    image_store = pickle.load(f)
+                print(f"  ✅ Image store loaded ({len(image_store)} images).")
+            else:
+                # Fallback check for generic image_data.pkl
+                if (db_path / "image_data.pkl").exists():
+                     with open(db_path / "image_data.pkl", "rb") as f:
+                        image_store = pickle.load(f)
+                     print(f"  ✅ Image store loaded (generic).")
+                else:
+                    print("  ⚠️ Warning: No image data pickle found.")
+
+        except Exception as e:
+            print(f"\n❌ ERROR LOADING FAISS: {e}")
+            sys.exit(1)
+
+        # --- 4. INITIALIZE AGENTS ---
+        print("  🔹 Initializing AI Agents...")
+        try:
+            diagnostic_agent = create_diagnostic_agent(api_key)
+            sandwich_processor = SandwichProcessor(api_key)
+            
+            # Simple mock for ImageAnalyzer if real one fails (we are testing text RAG)
+            try:
+                image_analyzer = ImageAnalyzer(api_key)
+            except:
+                class MockImageAnalyzer:
+                    async def analyze(self, *args, **kwargs): return "Mock Image Analysis"
+                image_analyzer = MockImageAnalyzer()
+                
+        except Exception as e:
+            print(f"  ❌ Failed to create agents: {e}")
+            sys.exit(1)
+
+        # --- 5. MOCK REQUEST SETUP ---
+        # Inject ALL dependencies into the mock state
+        mock_state = MockAppState(
+            vectorstore=vectorstore, 
+            image_store=image_store,
+            diagnostic_agent=diagnostic_agent,
+            image_analyzer=image_analyzer,
+            sandwich_processor=sandwich_processor
+        )
+        
+        mock_app = MockApp(mock_state)
+        self.mock_request = Request({"type": "http", "app": mock_app})
+        
+        try:
+            self.chat_service = ChatService(self.mock_request)
+            print("  ✅ ChatService instantiated successfully.")
+        except Exception as e:
+            print(f"  ❌ Failed to initialize ChatService: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        
+        self.rouge_scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+        self.smoothing = SmoothingFunction().method1
+
+    async def run_evaluation(self, test_cases: List[EvaluationData]) -> pd.DataFrame:
+        results = []
+        print(f"\n🚀 Starting Evaluation of {len(test_cases)} Test Cases...")
+        
+        for case in test_cases:
+            print(f"  Processing Query: {case.query_text[:40]}...")
+            
+            chain_inputs = {
+                "prompt": case.query_text,
+                "image_url": None, 
+                "vehicle": {},     
+                "chat_history": [],
+                "intent": "technical_question"
             }
-        ]
+            
+            case.start_time = time.time()
+            
+            try:
+                output = await self.chat_service.chain.ainvoke(chain_inputs)
+                case.end_time = time.time()
+                
+                case.generated_text = output.get("diagnosis_output", "")
+                
+                retrieved_meta = output.get("retrieved_context", [])
+                
+                # --- UPDATED METADATA EXTRACTION FOR PAGE PRECISION ---
+                case.retrieved_doc_ids = []
+                case.similarity_scores = []
+                
+                if not retrieved_meta and "context_2" in output:
+                    # Fallback for error cases
+                    if output["context_2"] and output["context_2"] != "No knowledge base context available":
+                         case.retrieved_doc_ids = ["(Content Retrieved)"]
+                else:
+                    for item in retrieved_meta:
+                        source = str(item.get("doc_id", ""))
+                        page = str(item.get("page", ""))
+                        
+                        # Create a composite ID: "Source | Page: X"
+                        # This allows strict matching against ground truth format
+                        if page and page != "unknown":
+                            doc_identifier = f"{source} | Page: {page}"
+                        else:
+                            doc_identifier = source
+                            
+                        case.retrieved_doc_ids.append(doc_identifier)
+                        
+                        # Score handling
+                        score_val = item.get("score")
+                        if score_val is None:
+                            case.similarity_scores.append(0.0)
+                        else:
+                            case.similarity_scores.append(float(score_val))
+                # -------------------------------------------------------
+                
+            except Exception as e:
+                logger.error(f"Error processing case {case.query_id}: {e}")
+                case.generated_text = "ERROR"
+                case.end_time = time.time()
+
+            metrics = self._calculate_row_metrics(case)
+            results.append(metrics)
+            
+        return pd.DataFrame(results)
+    def _calculate_row_metrics(self, data: EvaluationData) -> Dict:
+        """Calculates scores with Page-Level Precision"""
         
-        # Combine all test cases
-        test_cases = in_domain_cases + out_of_domain_cases + chit_chat_cases
-        # --- END OF MODIFICATIONS ---
+        latency = data.end_time - data.start_time
         
-        return [EvaluationData(**case) for case in test_cases]
-    
+        # Ground Truth Parsing
+        # JSON Format: ["Source", "Page: X"]
+        gt_source = data.relevant_doc_ids[0]
+        gt_page = data.relevant_doc_ids[1] if len(data.relevant_doc_ids) > 1 else None
+
+        # --- RETRIEVAL METRICS ---
+        
+        def check_match(retrieved_id_str):
+            # retrieved_id_str format: "Source | Page: X" or just "Source"
+            
+            # 1. Check Source
+            if gt_source not in retrieved_id_str:
+                return False
+                
+            # 2. Check Page (If GT specifies a page)
+            if gt_page:
+                # Extract page number from GT "Page: 3" -> "3"
+                gt_num = gt_page.split(":")[-1].strip()
+                
+                # Check if that number exists in the retrieved string (Simple check)
+                # e.g. "Page: 3" inside "Source | Page: 3"
+                if f"Page: {gt_num}" in retrieved_id_str:
+                    return True
+                    
+                # Allow +/- 1 page drift (Chunking overlap fix)
+                try:
+                    # Extract retrieved page number
+                    if "Page: " in retrieved_id_str:
+                        ret_num_str = retrieved_id_str.split("Page: ")[1].strip()
+                        ret_num = int(ret_num_str)
+                        target = int(gt_num)
+                        if abs(ret_num - target) <= 1:
+                            return True
+                except:
+                    pass
+                    
+                return False
+            
+            return True
+        # Top-K Calculation
+        top_1 = 1 if len(data.retrieved_doc_ids) > 0 and check_match(data.retrieved_doc_ids[0]) else 0
+        
+        top_3 = 0
+        for doc in data.retrieved_doc_ids[:3]:
+            if check_match(doc):
+                top_3 = 1
+                break
+                
+        top_5 = 0
+        for doc in data.retrieved_doc_ids[:5]:
+            if check_match(doc):
+                top_5 = 1
+                break
+
+        # Context Recall (Did we find the specific page ANYWHERE?)
+        recall = 0
+        for doc in data.retrieved_doc_ids:
+            if check_match(doc):
+                recall = 1
+                break
+
+        # --- GENERATION METRICS ---
+        
+        ref_tokens = [data.reference_text.lower().split()]
+        gen_tokens = data.generated_text.lower().split()
+        bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=self.smoothing)
+        
+        rouge = self.rouge_scorer.score(data.reference_text, data.generated_text)
+        rouge_f1 = rouge['rougeL'].fmeasure
+        
+        bert_f1 = 0.0
+        if BERTSCORE_AVAILABLE:
+            try:
+                P, R, F1 = bert_score([data.generated_text], [data.reference_text], lang="en", verbose=False)
+                bert_f1 = F1.mean().item()
+            except Exception:
+                pass
+
+        return {
+            "Query_ID": data.query_id,
+            "Query": data.query_text,
+            "Generated_Answer": data.generated_text[:100] + "...", 
+            
+            "Latency_Seconds": round(latency, 3),
+            
+            # Now "Top-1" means "Correct Page"
+            "Top_1_Page_Accuracy": top_1,
+            "Top_3_Page_Accuracy": top_3,
+            "Top_5_Page_Accuracy": top_5,
+            
+            "Page_Recall": round(recall, 3),
+            
+            "BLEU_Score": round(bleu, 3),
+            "ROUGE_L_F1": round(rouge_f1, 3),
+            "BERTScore_F1": round(bert_f1, 3)
+        }    
+# --- DATA LOADER ---
+class TestDataLoader:
     @staticmethod
-    def load_from_json(json_file: str) -> List[EvaluationData]:
-        """Load test data from JSON file"""
-        with open(json_file, 'r') as f:
-            data = json.load(f)
-        
-        return [EvaluationData(**item) for item in data]
-    
-    @staticmethod
-    def create_json_template(output_file: str = "test_data_template.json"):
-        """Create a JSON template file for manual test data entry"""
+    def create_template(filename="test_ground_truth.json"):
         template = [
             {
-                "query_id": "test_001",
-                "query_text": "Your test query here",
-                "retrieved_doc_ids": ["doc1", "doc2", "doc3"],
-                "relevant_doc_ids": ["doc1", "doc2"],
-                "similarity_scores": [0.95, 0.87, 0.72],
-                "generated_text": "Your chatbot's response here",
-                "reference_text": "Ground truth response here",
-                "start_time": 1234567890.0,
-                "end_time": 1234567891.5,
-                "metadata": {
-                    "vehicle_type": "car",
-                    "issue_category": "engine"
-                }
-            },
-            {
-                "query_id": "ood_001",
-                "query_text": "An out-of-domain query here",
-                "retrieved_doc_ids": [],
-                "relevant_doc_ids": [],
-                "similarity_scores": [],
-                "generated_text": "The bot's (hopefully) polite refusal",
-                "reference_text": "The ideal ground-truth refusal",
-                "start_time": 1234567892.0,
-                "end_time": 1234567893.5,
-                "metadata": {
-                    "category": "out_of_domain"
-                }
+                "id": "q1",
+                "question": "What should I do if my engine overheats?",
+                "reference_answer": "Pull over safely and turn off the engine immediately.",
+                "relevant_doc_ids": ["Vehicle_Breakdown_Queries"] 
             }
         ]
-        
-        with open(output_file, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(template, f, indent=2)
-        
-        print(f"✅ Template created at {output_file}")
-        print("📝 Edit this file with your actual test cases, then run:")
-        print(f"   python tests/test_rag_evaluation.py --mode comprehensive --data-file {output_file}")
+        print(f"✅ Created template: {filename}")
 
+    @staticmethod
+    def load_data(filename="test_ground_truth.json") -> List[EvaluationData]:
+        if not Path(filename).exists():
+            print("⚠️ File not found. Creating template...")
+            TestDataLoader.create_template(filename)
+            return []
+            
+        with open(filename, "r") as f:
+            raw_data = json.load(f)
+            
+        return [
+            EvaluationData(
+                query_id=item["id"],
+                query_text=item["question"],
+                relevant_doc_ids=item.get("relevant_doc_ids", []),
+                reference_text=item["reference_answer"]
+            ) for item in raw_data
+        ]
 
-async def run_basic_test():
-    """Run basic evaluation test with sample data"""
-    
-    print("="*70)
-    print("RAG SYSTEM EVALUATION - BASIC TEST")
-    print("="*70)
-    print()
-    
-    # Generate test data
-    print("Loading test data (in-domain and out-of-domain)...")
-    test_data = TestDataGenerator.create_sample_test_data()
-    total_cases = len(test_data) # <--- MODIFICATION
-    print(f"✅ Loaded {total_cases} test cases")
-    print()
-    
-    # Initialize evaluator
-    evaluator = RAGEvaluator()
-    
-    # Run evaluation
-    print("Running evaluation...")
-    # --- MODIFICATION START ---
-    print(f"Processing {total_cases} cases. This may take a moment as it runs in a single batch...")
-    start_eval_time = time.time()
-    # --- MODIFICATION END ---
-    
-    results_df = evaluator.evaluate(
-        test_data, 
-        k_values=[1, 3, 5],
-        calculate_bertscore=False  # Set to True if you have bert-score installed
-    )
-    
-    # --- MODIFICATION START ---
-    end_eval_time = time.time()
-    print(f"✅ Evaluation complete in {end_eval_time - start_eval_time:.2f} seconds.")
-    # --- MODIFICATION END ---
-    
-    # Display results
-    print()
-    print("="*70)
-    print("EVALUATION RESULTS")
-    print("="*70)
-    print()
-    
-    # Group by category
-    for category in results_df['Category'].unique():
-        print(f"\n{category} Metrics:")
-        print("-" * 70)
-        category_df = results_df[results_df['Category'] == category]
-        
-        for _, row in category_df.iterrows():
-            metric = row['Metric']
-            value = row['Value']
-            print(f"  {metric:.<50} {value:.4f}")
-    
-    print()
-    print("="*70)
-    
-    # Save results
-    output_dir = Path("evaluation_results")
-    output_dir.mkdir(exist_ok=True)
-    
-    evaluator.save_results(results_df, "evaluation_results/basic_test_eval")
-    
-    return results_df
-
-
-async def run_comprehensive_test(test_data_file: str = None):
-    """Run comprehensive evaluation with custom test data"""
-    
-    print("="*70)
-    print("RAG SYSTEM EVALUATION - COMPREHENSIVE TEST")
-    print("="*70)
-    print()
-    
-    # Load test data
-    if test_data_file and Path(test_data_file).exists():
-        print(f"Loading test data from {test_data_file}...")
-        test_data = TestDataGenerator.load_from_json(test_data_file)
-    else:
-        print("Using sample test data (in-domain and out-of-domain)...")
-        test_data = TestDataGenerator.create_sample_test_data()
-    
-    total_cases = len(test_data) # <--- MODIFICATION
-    print(f"✅ Loaded {total_cases} test cases")
-    print()
-    
-    # Initialize evaluator
-    evaluator = RAGEvaluator()
-    
-    # Run evaluation
-    print("Running comprehensive evaluation...")
-    # --- MODIFICATION START ---
-    print(f"Processing {total_cases} cases. This may take a moment as it runs in a single batch...")
-    start_eval_time = time.time()
-    # --- MODIFICATION END ---
-    print()
-    
-    results_df = evaluator.evaluate(
-        test_data,
-        k_values=[1, 3, 5],
-        calculate_bertscore=False  # Set to True if you want BERTScore
-    )
-    
-    # --- MODIFICATION START ---
-    end_eval_time = time.time()
-    print(f"✅ Evaluation complete in {end_eval_time - start_eval_time:.2f} seconds.")
-    # --- MODIFICATION END ---
-    
-    # Detailed results
-    print()
-    print("="*70)
-    print("COMPREHENSIVE EVALUATION RESULTS")
-    print("="*70)
-    print()
-    print(results_df.to_string(index=False))
-    
-    # Save results
-    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    output_path = f"evaluation_results/comprehensive_eval_{timestamp}"
-    evaluator.save_results(results_df, output_path)
-    
-    print()
-    print("="*70)
-    print(f"✅ Results saved to: {output_path}")
-    print("="*70)
-    
-    return results_df
-
-
-def compare_evaluations(eval_files: List[str]):
-    """Compare multiple evaluation results"""
-    
-    print("="*70)
-    print("EVALUATION COMPARISON")
-    print("="*70)
-    print()
-    
-    # Load all evaluations
-    dfs = []
-    labels = []
-    
-    for file_path in eval_files:
-        if not Path(file_path).exists():
-            print(f"⚠️  File not found: {file_path}")
-            continue
-        df = pd.read_csv(file_path)
-        dfs.append(df)
-        labels.append(Path(file_path).stem)
-    
-    if len(dfs) < 2:
-        print("❌ Need at least 2 valid files to compare")
-        return
-    
-    # Create comparison DataFrame
-    comparison_data = []
-    
-    for metric in dfs[0]['Metric'].unique():
-        row = {'Metric': metric}
-        for i, (df, label) in enumerate(zip(dfs, labels)):
-            value = df[df['Metric'] == metric]['Value'].values
-            if len(value) > 0:
-                row[label] = value[0]
-        comparison_data.append(row)
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    
-    # Calculate improvements
-    if len(dfs) >= 2:
-        baseline = labels[0]
-        for label in labels[1:]:
-            comparison_df[f'{label}_vs_{baseline}_improvement_%'] = (
-                (comparison_df[label] - comparison_df[baseline]) / 
-                comparison_df[baseline] * 100
-            )
-    
-    print(comparison_df.to_string(index=False))
-    
-    # Save comparison
-    comparison_df.to_csv("evaluation_results/comparison.csv", index=False)
-    print()
-    print("✅ Comparison saved to: evaluation_results/comparison.csv")
-    
-    return comparison_df
-
-
-# CLI Interface
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(description="RAG System Evaluation Test")
-    parser.add_argument(
-        "--mode",
-        choices=["basic", "comprehensive", "compare", "template"],
-        default="basic",
-        help="Evaluation mode"
-    )
-    parser.add_argument(
-        "--data-file",
-        type=str,
-        help="Path to test data JSON file"
-    )
-    parser.add_argument(
-        "--compare-files",
-        nargs="+",
-        help="CSV files to compare (for compare mode)"
-    )
-    parser.add_argument(
-        "--no-bertscore",
-        action="store_true",
-        help="Skip BERTScore calculation (faster)"
-    )
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", type=str, default="test_ground_truth.json", help="JSON file with test cases")
+    parser.add_argument("--create-template", action="store_true", help="Generate the JSON template file")
     args = parser.parse_args()
-    
-    if args.mode == "template":
-        # Create template file
-        TestDataGenerator.create_json_template()
+
+    if args.create_template:
+        TestDataLoader.create_template(args.file)
+    else:
+        test_cases = TestDataLoader.load_data(args.file)
         
-    elif args.mode == "basic":
-        # Run basic test
-        asyncio.run(run_basic_test())
-        
-    elif args.mode == "comprehensive":
-        # Run comprehensive test
-        asyncio.run(run_comprehensive_test(args.data_file))
-        
-    elif args.mode == "compare":
-        # Compare evaluations
-        if not args.compare_files or len(args.compare_files) < 2:
-            print("❌ Error: Need at least 2 files to compare")
-            print("Usage: --mode compare --compare-files file1.csv file2.csv")
+        if not test_cases:
+            print("❌ No test cases found. Please fill 'test_ground_truth.json'")
         else:
-            compare_evaluations(args.compare_files)
+            evaluator = RealSystemEvaluator()
+            results_df = asyncio.run(evaluator.run_evaluation(test_cases))
+            
+            print("\n" + "="*50)
+            print("EVALUATION RESULTS SUMMARY (Page-Level Precision)")
+            print("="*50)
+            print(f"Average Latency: {results_df['Latency_Seconds'].mean():.2f}s")
+            print(f"Top-1 Page Accuracy: {results_df['Top_1_Page_Accuracy'].mean()*100:.1f}%")
+            print(f"Top-3 Page Accuracy: {results_df['Top_3_Page_Accuracy'].mean()*100:.1f}%")
+            print(f"Top-5 Page Accuracy: {results_df['Top_5_Page_Accuracy'].mean()*100:.1f}%")
+            print(f"Page Recall: {results_df['Page_Recall'].mean():.3f}")
+            print(f"Semantic Similarity (BERTScore): {results_df['BERTScore_F1'].mean():.3f}")
+            print("-" * 50)
+            output_file = "evaluation_results_real.csv"
+            results_df.to_csv(output_file, index=False)
+            print(f"✅ Detailed results saved to {output_file}")

@@ -32,7 +32,7 @@ def process_pdf_with_images(pdf_path: str, cache_dir: str = ".vector_cache", for
     all_docs = []
     all_embeddings = []
     image_data_store = {}
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=300, separators=["\n\n", "Query", "\n", " ", ""])
 
     try:
         for i, page in enumerate(doc):

@@ -56,10 +56,8 @@ class VehicleTypeEnum(str, Enum):
     """Enum representing the types of vehicles a mechanic services."""
     CAR = "car"
     BIKE = "bike"
-    TRUCK = "truck"
     VAN = "van"
     SUV = "suv"
-    BUS = "bus"
     OTHER = "other"
 
 
@@ -169,8 +167,8 @@ class MechanicBase(BaseModel):
         Field(
             ...,
             min_length=1,
-            description="List of vehicle types the mechanic services (e.g., CAR, TRUCK)",
-            examples=[["car", "light_truck", "motorcycle"]]
+            description="List of vehicle types the mechanic services (e.g., CAR, BIKE)",
+            examples=[["car",  "motorcycle"]]
         )
     ]
     # ------------------
@@ -450,7 +448,7 @@ class MechanicOut(MechanicRegistration):
                 "phone_number": "+923001234567",
                 "email": "ahmed@example.com",
                 "expertise": ["engine", "electrical"],
-                "serviced_vehicle_types":  "light_truck",
+                "serviced_vehicle_types":  "car",
                 "province": "Punjab",
                 "city": "Lahore",
                 "address": "Street 123, Model Town",

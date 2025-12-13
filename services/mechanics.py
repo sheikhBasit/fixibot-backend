@@ -293,92 +293,181 @@ class MechanicService:
             )
 
     
+    # @staticmethod
+    # async def search_mechanics(
+    #     city: Optional[str] = None, # 💡 MODIFIED: Made city optional
+    #     expertise: Optional[List[ExpertiseEnum]] = None,
+    #     # 👇 NEW PARAMETER FOR VEHICLE ENUM TYPE
+    #     vehicle_types: Optional[VehicleTypeEnum] = None,
+    #     min_experience: int = 0,
+    #     latitude: Optional[float] = None,
+    #     longitude: Optional[float] = None,
+    #     max_distance_km: float = 10
+    # ) -> List[MechanicOut]:
+    #     """
+    #     Search mechanics by location and expertise using MongoDB geospatial queries.
+    #     If location is provided, results are limited to 3 for relevance.
+    #     """
+        
+    #     # Determine the maximum number of results to fetch
+    #     is_geo_search = latitude is not None and longitude is not None and max_distance_km > 0
+    #     limit = 3 if is_geo_search else 100 # 💡 MODIFIED: Limit to 3 if location is used
+        
+    #     try:
+    #         # Base query for verified and available mechanics
+    #         query = {
+    #             "is_verified": True,
+    #             "is_available": True,
+    #             "years_of_experience": {"$gte": min_experience}
+    #         }
+            
+    #         # 💡 MODIFIED: Add city filter ONLY if provided
+    #         if city:
+    #             normalized_city = city.lower()
+    #             query["city"] = normalized_city
+
+    #         # Add expertise filter if provided
+    #         if expertise:
+    #             expertise_values = [e.value for e in expertise]
+    #             query["expertise"] = {"$all": expertise_values}
+            
+    #         if vehicle_types:
+    #             # The DB field is 'serviced_vehicle_types' (single string)
+    #             # We check for a match on the single string value.
+    #             query["serviced_vehicle_types"] = vehicle_types.value #
+
+    #         # Add geospatial query if coordinates provided
+    #         if is_geo_search:
+    #             query["location"] = {
+    #                 "$near": {
+    #                     "$geometry": {
+    #                         "type": "Point",
+    #                         "coordinates": [longitude, latitude]  # GeoJSON: [long, lat]
+    #                     },
+    #                     "$maxDistance": max_distance_km * 1000  # Convert km to meters
+    #                 }
+    #             }
+            
+    #         # 🚀 DEBUGGING STEP 1: Log the final query before execution
+    #         logger.info(f"Search Type: {'GEOSPATIAL' if is_geo_search else 'GENERAL'}, Limit: {limit}")
+    #         logger.info(f"MongoDB Search Query: {json.dumps(query)}")
+
+    #         # Execute query - MongoDB handles spatial search efficiently
+    #         # Note: For real Motor/Pymongo, the limit should be applied to the cursor:
+    #         cursor = db.mechanics_collection.find(query).limit(limit) 
+    #         # For this mock, we pass the limit to to_list
+    #         # cursor = db.mechanics_collection.find(query)
+    #         mechanics = await cursor.to_list(length=limit)
+            
+    #         # 🚀 DEBUGGING STEP 2: Log the number of raw results found
+    #         logger.info(f"Found {len(mechanics)} raw mechanics matching the query.")
+            
+    #         validated_mechanics = []
+    #         for mechanic in mechanics:
+    #             fixed_mechanic = await MechanicService._fix_missing_fields(mechanic, mechanic["_id"])
+    #             validated_mechanics.append(MechanicOut(**fixed_mechanic))
+
+    #         # 🚀 DEBUGGING STEP 3: Log the number of validated results
+    #         logger.info(f"Returning {len(validated_mechanics)} validated mechanics.")
+            
+    #         return validated_mechanics
+            
+    #     except Exception as e:
+    #         logger.error(f"Error searching mechanics: {e}", exc_info=True)
+    #         raise HTTPException(
+    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #             detail="Error searching mechanics"
+    #         )
     @staticmethod
     async def search_mechanics(
-        city: Optional[str] = None, # 💡 MODIFIED: Made city optional
+        city: Optional[str] = None,
         expertise: Optional[List[ExpertiseEnum]] = None,
-        # 👇 NEW PARAMETER FOR VEHICLE ENUM TYPE
         vehicle_types: Optional[VehicleTypeEnum] = None,
         min_experience: int = 0,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
-        max_distance_km: float = 10
+        max_distance_km: float = 10,
+        auto_expand_range: bool = True,
+        limit: int = 50 # 💡 UPDATED: Default to 50 results (was 3)
     ) -> List[MechanicOut]:
         """
-        Search mechanics by location and expertise using MongoDB geospatial queries.
-        If location is provided, results are limited to 3 for relevance.
+        Search mechanics with expanding radius logic.
+        If no mechanics found in initial range, it expands up to 50km.
+        Returns up to 'limit' mechanics (default 50).
         """
         
-        # Determine the maximum number of results to fetch
-        is_geo_search = latitude is not None and longitude is not None and max_distance_km > 0
-        limit = 3 if is_geo_search else 100 # 💡 MODIFIED: Limit to 3 if location is used
+        is_geo_search = latitude is not None and longitude is not None
         
+        # Define expansion steps
+        # If auto_expand is True: [10, 15, 30, 50]
+        # If False: [10]
+        search_radii = [max_distance_km, 15, 30, 50] if (auto_expand_range and is_geo_search) else [max_distance_km]
+        
+        # Ensure user's initial preference is first
+        if search_radii[0] != max_distance_km:
+             search_radii.insert(0, max_distance_km)
+             search_radii = sorted(list(set(search_radii)))
+
+        found_mechanics = []
+
         try:
-            # Base query for verified and available mechanics
-            query = {
-                "is_verified": True,
-                "is_available": True,
-                "years_of_experience": {"$gte": min_experience}
-            }
-            
-            # 💡 MODIFIED: Add city filter ONLY if provided
-            if city:
-                normalized_city = city.lower()
-                query["city"] = normalized_city
-
-            # Add expertise filter if provided
-            if expertise:
-                expertise_values = [e.value for e in expertise]
-                query["expertise"] = {"$all": expertise_values}
-            
-            if vehicle_types:
-                # The DB field is 'serviced_vehicle_types' (single string)
-                # We check for a match on the single string value.
-                query["serviced_vehicle_types"] = vehicle_types.value #
-
-            # Add geospatial query if coordinates provided
-            if is_geo_search:
-                query["location"] = {
-                    "$near": {
-                        "$geometry": {
-                            "type": "Point",
-                            "coordinates": [longitude, latitude]  # GeoJSON: [long, lat]
-                        },
-                        "$maxDistance": max_distance_km * 1000  # Convert km to meters
-                    }
+            for radius in search_radii:
+                logger.info(f"🔍 Searching within {radius} km radius. Limit: {limit}")
+                
+                # Base Query
+                query = {
+                    "is_verified": True,
+                    "is_available": True,
+                    "years_of_experience": {"$gte": min_experience}
                 }
-            
-            # 🚀 DEBUGGING STEP 1: Log the final query before execution
-            logger.info(f"Search Type: {'GEOSPATIAL' if is_geo_search else 'GENERAL'}, Limit: {limit}")
-            logger.info(f"MongoDB Search Query: {json.dumps(query)}")
+                
+                if city: 
+                    query["city"] = city.lower()
+                
+                if expertise:
+                    query["expertise"] = {"$all": [e.value for e in expertise]}
+                
+                if vehicle_types:
+                    query["serviced_vehicle_types"] = vehicle_types.value
 
-            # Execute query - MongoDB handles spatial search efficiently
-            # Note: For real Motor/Pymongo, the limit should be applied to the cursor:
-            cursor = db.mechanics_collection.find(query).limit(limit) 
-            # For this mock, we pass the limit to to_list
-            # cursor = db.mechanics_collection.find(query)
-            mechanics = await cursor.to_list(length=limit)
-            
-            # 🚀 DEBUGGING STEP 2: Log the number of raw results found
-            logger.info(f"Found {len(mechanics)} raw mechanics matching the query.")
-            
+                # Geo Query
+                if is_geo_search:
+                    query["location"] = {
+                        "$near": {
+                            "$geometry": {
+                                "type": "Point",
+                                "coordinates": [longitude, latitude]
+                            },
+                            "$maxDistance": radius * 1000 
+                        }
+                    }
+
+                # Execute Query with Higher Limit
+                # Note: We use the 'limit' parameter passed to the function (default 50)
+                cursor = db.mechanics_collection.find(query).limit(limit)
+                raw_mechanics = await cursor.to_list(length=limit)
+                
+                if raw_mechanics:
+                    found_mechanics = raw_mechanics
+                    logger.info(f"✅ Found {len(found_mechanics)} mechanics within {radius} km.")
+                    break # Stop expanding if found
+                else:
+                     logger.info(f"⚠️ No mechanics found within {radius} km. Expanding range...")
+
+            # Validate & Return
             validated_mechanics = []
-            for mechanic in mechanics:
+            for mechanic in found_mechanics:
                 fixed_mechanic = await MechanicService._fix_missing_fields(mechanic, mechanic["_id"])
                 validated_mechanics.append(MechanicOut(**fixed_mechanic))
 
-            # 🚀 DEBUGGING STEP 3: Log the number of validated results
-            logger.info(f"Returning {len(validated_mechanics)} validated mechanics.")
-            
             return validated_mechanics
-            
+
         except Exception as e:
             logger.error(f"Error searching mechanics: {e}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail="Error searching mechanics"
             )
-
 
     @staticmethod
     async def create_geospatial_index():

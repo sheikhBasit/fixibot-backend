@@ -1,0 +1,328 @@
+Query_ID,Query,Generated_Answer,Latency_Seconds,Top_1_Page_Accuracy,Top_3_Page_Accuracy,Top_5_Page_Accuracy,Page_Recall,BLEU_Score,ROUGE_L_F1,BERTScore_F1
+car_start_click,"My car won’t start, and I hear a clicking sound when I turn the key. What is the problem?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",34.031,1,1,1,1,0.004,0.033,0.829
+car_overheat,What should I do if my car engine overheats while driving?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",1.437,1,1,1,1,0.0,0.0,0.835
+wrong_fuel,I accidentally put petrol in my diesel car. What do I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.545,0,0,1,1,0.007,0.075,0.84
+check_engine_blinking,The check engine light is blinking steadily while I am driving. Is this serious?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.216,1,1,1,1,0.012,0.075,0.836
+ac_leak_diagnosis,My car is leaking fluid. How do I know if it is an AC leak or something else?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.217,0,0,0,0,0.005,0.036,0.821
+bike_wont_start_battery_ok,My motorcycle engine doesn’t start even though the battery is fine. What could be the issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.336,0,0,1,1,0.0,0.0,0.832
+truck_black_smoke,My truck’s exhaust is blowing black smoke. What does this mean?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.956,1,1,1,1,0.0,0.0,0.826
+hybrid_start_issue,My hybrid car won’t start or cranks slowly. What should I check?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.327,1,1,1,1,0.007,0.039,0.833
+tire_blowout,My truck had a tyre blowout on the highway. What should I do?,"Step 1: Move to a safe location, turn on hazard lights.
+Step 2: Inspect the tire, check for damage, ...",0.516,0,0,0,0,0.028,0.338,0.902
+electric_bike_range,My electric bike’s range suddenly dropped. What is the cause?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.37,1,1,1,1,0.0,0.0,0.829
+brake_shake,My car shakes when I apply brakes. Why is this happening?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.253,1,1,1,1,0.007,0.12,0.839
+flat_tire_signs,What are the signs of a flat tire while driving?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.31,1,1,1,1,0.0,0.0,0.824
+hard_steering,My steering wheel is hard to turn. What could be the cause?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.4,1,1,1,1,0.0,0.0,0.828
+squealing_start,Why is my car making a loud squealing noise when I start it?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.432,1,1,1,1,0.0,0.0,0.832
+dim_headlights,My headlights are dim even though I changed the bulbs. What could be wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.414,0,0,0,0,0.0,0.0,0.826
+whining_acceleration,My car makes a whining noise when accelerating. What is the issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.198,1,1,1,1,0.008,0.043,0.833
+car_stalls_stop,My car stalls at stop signs. What should I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.218,1,1,1,1,0.007,0.042,0.821
+crank_no_start,My engine cranks but won’t start. What could be the reason?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.196,0,0,0,0,0.006,0.038,0.829
+tire_humming,I hear a humming sound from my tires while driving. Is it normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.353,1,1,1,1,0.0,0.0,0.828
+check_engine_solid,The check engine light comes on and stays on. What does it mean?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.356,1,1,1,1,0.0,0.0,0.835
+battery_loose,My battery terminals are loose. How do I fix this?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.3,0,0,0,0,0.006,0.038,0.833
+ignition_switch,My ignition key won't turn. Is the switch faulty?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.353,0,0,0,0,0.004,0.034,0.834
+immobilizer_issue,The immobilizer system is preventing the vehicle from starting.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.288,0,0,0,0,0.004,0.034,0.833
+clicking_no_crank,"The engine doesn't crank, but there's a clicking sound.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.386,0,0,0,0,0.008,0.043,0.831
+engine_seized,My mechanic says the engine is seized. What does that mean?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.201,0,1,1,1,0.005,0.069,0.836
+slow_crank,The engine is cranking very slowly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.198,0,0,1,1,0.0,0.0,0.829
+grinding_start,"It's cranking slowly, and there's a grinding noise.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.256,0,1,1,1,0.0,0.0,0.833
+spinning_noise,It's cranking fast and there's a spinning noise.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.197,0,0,1,1,0.004,0.069,0.839
+ac_leak,How do I diagnose an AC refrigerant leak?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.253,0,0,1,1,0.0,0.0,0.833
+ac_compressor,My AC compressor is not turning on. What should I check?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.192,0,0,1,1,0.0,0.0,0.829
+condenser_fan,The AC condenser fan is not turning on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.287,0,0,0,0,0.0,0.0,0.83
+cabin_filter,There is little to no airflow from my AC vents.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.282,0,0,0,0,0.0,0.0,0.835
+blower_motor,Diagnosing a bad blower motor.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.462,0,0,0,0,0.006,0.077,0.835
+vent_control,Air is coming from the wrong vents (defrost instead of face).,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.329,0,0,0,0,0.0,0.0,0.837
+toyota_ac,Troubleshooting AC Issues in a Toyota Corolla.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.223,0,0,0,0,0.0,0.0,0.832
+honda_accord_ac,Why is it urgent to fix the AC in a Honda Accord?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.269,0,0,0,0,0.0,0.0,0.831
+nissan_altima_ac,What are the common causes of AC issues in a Nissan Altima?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",1.055,0,1,1,1,0.0,0.0,0.827
+engine_overheat_fix,Common reasons for an overheating car engine.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.504,0,0,0,0,0.008,0.043,0.83
+radiator_fan_bad,How do I know if my radiator fan is bad?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.004,0.068,0.834
+thermostat_fail,How do I know if my thermostat has failed?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.668,0,1,1,1,0.0,0.0,0.82
+honda_crv_overheat,What to check when your Honda CR-V is overheating?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.319,1,1,1,1,0.0,0.0,0.826
+key_wont_turn,What to do if your ignition key won’t turn?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.248,0,0,0,0,0.005,0.035,0.825
+dead_battery_key,Key won't turn because the battery is dead.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.538,0,0,0,0,0.0,0.0,0.829
+gear_selector_park,Transmission gear selector is not in park or neutral.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.252,0,1,1,1,0.006,0.038,0.828
+worn_key,The key is worn out or damaged.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.253,0,0,0,0,0.005,0.034,0.832
+ignition_obstruction,You have a physical obstruction in the ignition lock mechanism.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.192,0,0,0,0,0.006,0.039,0.825
+altima_key_issue,Why is the key not turning in a Nissan Altima?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.292,0,0,0,0,0.007,0.038,0.831
+camry_key_issue,Troubleshooting key ignition issues in a Toyota Camry.,"Step 1: Check battery voltage.
+Step 2: Inspect ignition switch and key fob.
+Step 3: Consult a mechan...",0.598,1,1,1,1,0.028,0.32,0.91
+corolla_key_issue,What to do when your Toyota Corolla key won’t turn?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.319,1,1,1,1,0.0,0.0,0.833
+oil_leak_signs,Warning signs that you have an oil leak.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.228,1,1,1,1,0.0,0.0,0.831
+oil_filter_leak,Oil is leaking from the oil filter.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.274,1,1,1,1,0.0,0.0,0.834
+drain_plug_leak,Oil leaking from the drain plug.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.189,0,0,1,1,0.0,0.042,0.832
+valve_cover_leak,Oil leaking from valve cover gaskets.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.234,1,1,1,1,0.0,0.0,0.829
+oil_change_neglect,What happens when you don’t change your oil?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.214,0,1,1,1,0.0,0.0,0.826
+oil_change_interval,When to change your oil?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.237,0,1,1,1,0.005,0.034,0.828
+synthetic_oil,Which type of oil to use?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.209,0,0,0,0,0.0,0.039,0.828
+heater_cold_air,My heater is blowing cold air. What to do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.276,0,0,0,0,0.0,0.0,0.825
+air_lock_coolant,How to fix an air lock in the cooling system?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.309,0,0,0,0,0.0,0.0,0.818
+heater_core_clog,How to diagnose a clogged heater core?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.358,0,0,0,0,0.0,0.0,0.823
+rough_idle_injectors,My car has a rough idle. Could it be dirty fuel injectors?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.285,0,0,0,0,0.014,0.115,0.851
+rough_idle_spark,Rough idle caused by spark plugs.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.215,0,0,0,0,0.0,0.043,0.828
+pcv_valve,What is a PCV valve and how does it affect idle?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.323,0,0,0,0,0.007,0.039,0.831
+vacuum_leak,How to find a vacuum leak causing rough idle?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.274,0,0,0,0,0.007,0.077,0.829
+motorcycle_jerk,My scooter slows down or jerks when I accelerate.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.698,0,0,0,0,0.0,0.0,0.826
+heavy_bike_shutoff,My heavy bike shuts off suddenly while riding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.564,0,0,0,0,0.0,0.0,0.825
+truck_knocking,My truck engine is making a knocking sound.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.525,0,1,1,1,0.006,0.118,0.845
+ebike_charging,My electric bike doesn’t charge properly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.466,0,0,1,1,0.0,0.0,0.831
+bike_vibration,My motorcycle vibrates a lot when idle.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.229,0,0,0,0,0.0,0.0,0.822
+bike_weak_brakes,My bike’s brakes feel weak even after replacing brake pads.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.242,0,0,0,0,0.0,0.0,0.823
+moped_uphill,My moped loses power when going uphill.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",1.311,0,0,0,0,0.0,0.0,0.825
+escooter_shutdown,My electric scooter suddenly stopped while riding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.237,0,1,1,1,0.007,0.041,0.829
+bike_overheat,My bike engine is overheating.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.336,0,1,1,1,0.006,0.038,0.827
+bike_battery_no_charge,My bike battery isn’t charging.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.724,0,1,1,1,0.0,0.04,0.833
+bike_spark_plug,"My bike won’t start, maybe due to spark plug.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.762,0,0,0,0,0.0,0.0,0.831
+bike_kickstart,My bike’s kickstart is not working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.212,0,1,1,1,0.005,0.071,0.834
+bike_flat_tire,I got a flat tyre while riding my bike.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.22,0,0,0,0,0.006,0.077,0.833
+bike_chain_noise,My bike chain is noisy or keeps slipping.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.217,0,1,1,1,0.0,0.0,0.829
+bike_clutch_weak,"My clutch feels weak, and the bike isn’t picking up speed.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.336,0,0,1,1,0.0,0.0,0.835
+bike_headlight_fail,My headlight suddenly stopped working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.272,0,0,1,1,0.0,0.0,0.834
+bike_brake_fail,My brakes failed while riding!,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.295,0,0,0,0,0.0,0.0,0.825
+bike_fuel_leak,I noticed fuel leaking from my bike.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.632,0,1,1,1,0.007,0.08,0.83
+bike_gear_stuck,My bike gears are hard to shift or getting stuck.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.239,0,0,1,1,0.0,0.0,0.828
+carburetor_drip,Fuel is dripping from the carburetor.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.22,0,0,0,0,0.0,0.0,0.833
+bike_smoke,My exhaust is releasing black or white smoke.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.41,0,1,1,1,0.0,0.078,0.828
+bike_wobbly_handle,My bike’s handle feels shaky or wobbly while riding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.268,0,0,1,1,0.0,0.0,0.827
+bike_self_start,My bike’s self-start button is not working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.263,0,0,1,1,0.007,0.041,0.817
+touring_knocking,I hear a knocking sound from my touring bike’s engine.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.266,1,1,1,1,0.0,0.0,0.835
+clutch_stuck,My clutch feels stuck or the bike moves forward when I try to shift.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.222,0,1,1,1,0.0,0.0,0.824
+radiator_overheat_bike,My radiator is overheating. What should I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.211,0,0,0,0,0.008,0.043,0.828
+abs_light_bike,The ABS light is on while riding. Is it safe?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.229,0,0,0,0,0.008,0.042,0.834
+chain_skipping,My chain jumps or skips while accelerating.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.245,0,0,0,0,0.0,0.0,0.823
+suspension_bottoms,My suspension bottoms out on bumps.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.282,0,0,0,0,0.0,0.0,0.827
+foggy_headlight,My headlight is foggy from the inside.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.236,0,0,0,0,0.007,0.041,0.828
+touring_choking,My touring bike feels like it’s choking or has poor pickup.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.261,0,1,1,1,0.0,0.0,0.827
+pannier_rattle,My panniers or luggage mounts are rattling.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.307,0,0,0,0,0.0,0.0,0.828
+throttle_dead_spot,There’s a dead spot when I twist the throttle.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.274,0,0,1,1,0.0,0.0,0.818
+cruise_control_fail,My cruise control won’t turn on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.319,0,0,0,0,0.0,0.0,0.828
+handlebar_shake,My handlebar shakes at high speed.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.275,0,0,0,0,0.0,0.0,0.829
+slipper_clutch,My slipper clutch isn’t working smoothly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.26,0,0,0,0,0.0,0.044,0.829
+windshield_rattle,I hear rattling near the windshield while riding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.188,0,0,0,0,0.009,0.047,0.83
+sidestand_sensor,My bike won’t start unless I fiddle with the side stand.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.23,0,0,0,0,0.0,0.0,0.828
+ebike_drain,My electric bike battery drains too fast.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.396,1,1,1,1,0.0,0.0,0.826
+ebike_wont_turn_on,My electric bike won’t turn on.,"Step 1: Check battery voltage and charge level.
+Step 2: Inspect wiring and connections for damage or...",0.627,0,0,0,0,0.316,0.52,0.93
+throttle_no_response,My bike turns on but the throttle doesn’t respond.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.272,0,0,0,0,0.0,0.0,0.829
+battery_overheat,My battery pack is overheating. Is that normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.378,0,0,0,0,0.0,0.0,0.825
+ebike_wont_charge,My electric bike won’t charge.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.245,0,0,0,0,0.0,0.0,0.827
+motor_noise,My motor is making strange noise or vibrations.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.268,0,0,0,0,0.0,0.0,0.828
+power_loss_ebike,My bike lost power suddenly while riding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.267,0,0,0,0,0.009,0.044,0.829
+display_dead,The display screen stopped working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.509,0,0,0,0,0.0,0.0,0.836
+regen_fail,Regenerative braking isn’t working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.327,0,0,0,0,0.0,0.043,0.828
+ebike_horn_light,My horn and lights are not working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.297,0,0,0,0,0.0,0.0,0.824
+ebike_error_code,I see an error code on the screen. What does it mean?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.249,0,0,0,0,0.0,0.044,0.833
+eco_mode_fail,Eco mode isn’t switching.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.26,0,0,0,0,0.0,0.0,0.841
+ebike_jerky,My ride feels jerky and speed is unstable.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.216,0,0,0,0,0.008,0.043,0.833
+rear_brake_drag,The rear brake is dragging while I ride.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.243,0,0,0,0,0.0,0.0,0.825
+bike_puncture,My bike tyre got punctured. What should I do now?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.262,0,0,0,0,0.008,0.044,0.834
+worn_brake_pads,I think my brake pads are worn out. Is it dangerous?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.332,0,0,0,0,0.0,0.0,0.83
+loose_handle,The handle feels loose or wobbly. What should I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.203,0,0,0,0,0.0,0.0,0.827
+indicator_fail_bike,My headlight or indicator isn’t working. What now?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.253,0,0,0,0,0.0,0.0,0.829
+loose_chain_safe,My bike chain feels loose. Is it safe to ride?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.265,0,0,0,0,0.0,0.0,0.825
+bike_wont_start_check,My bike won’t start. What’s the first thing to check?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.227,0,0,0,0,0.0,0.0,0.831
+engine_stalls_bike,The engine stalls often. What could be wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.21,0,0,0,0,0.0,0.0,0.831
+horn_stopped,My bike horn suddenly stopped. How do I fix it?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.583,0,0,0,0,0.0,0.0,0.837
+loose_mirror,One of my mirrors is loose or broken. Is it okay to ride?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.534,0,0,0,0,0.008,0.044,0.835
+seat_lock_jam,My seat lock is jammed and won’t open.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.254,0,0,0,0,0.0,0.045,0.826
+bus_tire_losing_air,My bus tyre is rapidly losing air but hasn’t gone flat yet.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.337,0,0,0,0,0.0,0.0,0.83
+trailer_tire_wear,My trailer tyres have uneven wear patterns.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.53,0,0,0,0,0.0,0.0,0.83
+truck_brakes_soft,My truck brakes feel soft and unresponsive.,"Step 1: Check brake fluid level.
+Step 2: Inspect brake pads and rotors for wear.
+Step 3: Bleed brake...",1.571,0,0,1,1,0.248,0.625,0.931
+brake_fade_bus,My bus brakes overheat after long downhill drive causing fade.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.251,1,1,1,1,0.0,0.0,0.826
+air_brake_warning,My truck’s air brake warning light is on. Is it dangerous?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.215,0,0,0,0,0.0,0.0,0.83
+truck_steam_radiator,My truck overheated and steam is coming from the radiator.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.318,0,0,0,0,0.0,0.0,0.836
+truck_stalls_random,My truck stalls randomly on the road.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.489,0,0,0,0,0.0,0.0,0.823
+truck_power_loss_hill,My heavy-duty truck lost power while climbing a hill.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.241,0,0,0,0,0.0,0.0,0.828
+bus_wont_start,My bus won’t start and only clicks when I turn the key.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",1.08,0,0,0,0,0.0,0.0,0.824
+van_lights_flicker,My van’s lights flicker while idling.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.191,0,0,0,0,0.0,0.0,0.825
+dashboard_blank,The dashboard in my truck went blank while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.266,0,0,0,0,0.0,0.0,0.83
+diesel_oil_leak,My diesel truck is leaking oil under the engine.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.245,0,1,1,1,0.0,0.0,0.823
+van_trans_fluid,My van transmission fluid is low and gear shifts are grinding.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.285,0,0,0,0,0.0,0.0,0.832
+truck_ps_whine,My truck’s power steering is making whining noises.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.36,0,0,0,0,0.0,0.0,0.824
+bus_black_smoke,My bus is emitting black smoke from the exhaust.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.222,0,0,0,0,0.0,0.0,0.83
+defroster_fail,"My truck’s defroster isn’t working, and windows fog in cold weather.","I'm your automotive diagnostic assistant, so I can only help with vehicle-related questions. 
+      ...",0.001,0,0,0,0,0.0,0.0,0.742
+trailer_lights,My trailer lights don’t work.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.763,0,0,0,0,0.0,0.0,0.833
+trailer_sway,The trailer hitch felt loose and the trailer swayed on the highway.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.267,0,0,0,0,0.0,0.0,0.823
+truck_gear_pop,My heavy truck gear keeps popping out while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.205,0,0,0,0,0.0,0.0,0.827
+van_clutch_spongy,My van clutch pedal feels spongy and shifting’s hard.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.287,0,0,0,0,0.0,0.0,0.828
+bus_front_vibrate,My bus front end is vibrating at speed.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.292,0,0,0,0,0.0,0.0,0.827
+truck_bottoms_out,My truck bottoms out over bumps.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.447,0,0,0,0,0.0,0.0,0.832
+trailer_air_line,My trailer coupling air line disconnected while hauling.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.29,0,0,0,0,0.0,0.0,0.828
+coolant_in_oil,My truck shows coolant in engine oil.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.503,0,0,0,0,0.0,0.0,0.831
+fuel_tank_leak,Fuel tank on my bus has a leak.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.181,0,0,0,0,0.0,0.048,0.824
+trailer_deck_sag,My trailer deck is sagging under load.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.449,0,0,0,0,0.0,0.0,0.833
+exhaust_co,My truck’s exhaust is leaking carbon monoxide.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.251,0,0,0,0,0.0,0.0,0.833
+truck_loss_ps_fluid,My truck lost power steering fluid and steering is heavy.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.33,0,0,0,0,0.0,0.0,0.826
+catalytic_glow,My van’s catalytic converter is glowing red.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.292,0,0,0,0,0.0,0.047,0.825
+indicator_one_side,My indicator/blinker is not working on one side.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.301,0,0,0,0,0.0,0.0,0.831
+indicators_both_fail,Both my indicators are not functioning.,"Step 1: Check the indicator fuse in the fuse box.
+Step 2: Inspect the flasher relay and wiring for d...",0.631,0,1,1,1,0.045,0.431,0.916
+headlight_fail,My headlight is not turning on at all.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.281,0,1,1,1,0.0,0.0,0.829
+high_beam_only,"My high beam works, but the low beam doesn’t.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.307,0,1,1,1,0.0,0.0,0.83
+taillight_fail,My taillight or brake light is not lighting up.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.248,1,1,1,1,0.0,0.0,0.83
+plate_light,The number plate light is off.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.63,1,1,1,1,0.0,0.0,0.832
+dashboard_lights,"My dashboard lights (speedometer, fuel gauge) are not glowing.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.311,0,0,0,0,0.0,0.0,0.825
+fuel_gauge_stuck,The fuel gauge needle is stuck or not showing anything.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.009,0.047,0.837
+reverse_light_fail,The reverse light doesn’t work when I shift to reverse.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.342,0,0,0,0,0.0,0.0,0.833
+lights_flicker,My vehicle has flickering lights while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.201,0,0,0,0,0.0,0.0,0.826
+dim_lights_load,All lights go dim when I turn on the headlight.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.245,0,0,0,0,0.0,0.0,0.831
+bulb_new_fail,"I changed the bulb, but the light is still not working.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.0,0.0,0.828
+cabin_light_auto,My interior cabin light doesn’t turn on automatically.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.236,0,0,0,0,0.0,0.0,0.828
+engine_overheat_drive,My engine is overheating while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.237,0,0,0,0,0.0,0.0,0.831
+heater_cold,My car's heater is blowing cold air.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.261,0,0,0,0,0.0,0.0,0.828
+radiator_fan_fail,The radiator fan is not turning on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.239,1,1,1,1,0.0,0.0,0.823
+white_smoke_overheat,I see white smoke and overheating.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.258,0,0,0,0,0.009,0.047,0.834
+temp_gauge_fluctuate,My temperature gauge keeps going up and down.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.369,0,0,0,0,0.009,0.049,0.828
+heater_fast_only,The heater works only while driving fast.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.278,0,0,0,0,0.0,0.0,0.833
+steam_engine_bay,Steam is coming from the engine bay.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.29,0,0,0,0,0.0,0.0,0.839
+cabin_hot_no_ac,Cabin gets too hot even when AC is off.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.649,0,0,0,0,0.0,0.0,0.826
+coolant_leak_under,Coolant is leaking under the vehicle.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.438,0,0,0,0,0.0,0.0,0.823
+bike_engine_hot,My bike engine gets very hot even on short rides.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.263,0,0,0,0,0.0,0.0,0.828
+truck_hill_overheat,My truck overheats only while climbing hills.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.0,0.0,0.835
+coolant_light,The coolant warning light turns on often.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.26,0,0,1,1,0.0,0.0,0.833
+overheat_with_ac,My vehicle overheats when AC is turned on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.19,0,0,0,0,0.0,0.0,0.831
+heater_burning_smell,My heater smells like something is burning.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.242,0,0,0,0,0.009,0.044,0.824
+brown_coolant,My coolant turns brown.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.173,0,0,0,0,0.009,0.047,0.821
+brakes_spongy,My brakes feel spongy or soft when I press the pedal.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.261,0,1,1,1,0.009,0.048,0.823
+brake_grind,My bike/car makes a grinding noise when braking.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.23,0,1,1,1,0.009,0.045,0.833
+brake_pull,My brakes are pulling the vehicle to one side.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.228,0,1,1,1,0.0,0.0,0.824
+brake_hard,Brake pedal is hard to press.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.258,0,1,1,1,0.0,0.0,0.824
+brake_light_dash,Brake light on dashboard is on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.281,0,0,0,0,0.0,0.0,0.834
+clutch_loose,Clutch pedal is too loose or goes all the way down.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.201,0,1,1,1,0.0,0.049,0.817
+clutch_jerk,Vehicle jerks when releasing the clutch.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.213,0,1,1,1,0.009,0.05,0.826
+clutch_smell,Burning smell from the clutch area.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.434,0,0,1,1,0.0,0.0,0.828
+clutch_squeak,Clutch pedal is noisy or squeaky.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.217,0,1,1,1,0.0,0.0,0.827
+gear_grind,Gear shifting is hard or not smooth.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.234,0,0,0,0,0.0,0.0,0.82
+accelerator_stuck,Accelerator is stuck or not returning.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.522,0,1,1,1,0.0,0.0,0.832
+engine_slow_response,Engine doesn’t respond quickly when I press the accelerator.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.348,0,0,0,0,0.0,0.0,0.823
+hard_pedal,The accelerator pedal feels too hard.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.212,0,1,1,1,0.0,0.05,0.83
+rpm_increase,RPM increases without pressing the pedal.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.205,0,1,1,1,0.0,0.0,0.828
+hesitation,My vehicle hesitates when I press the accelerator.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.204,0,1,1,1,0.009,0.05,0.827
+radiator_overheat_fast,My engine temperature is rising quickly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.184,0,0,0,0,0.0,0.0,0.836
+radiator_leak,Coolant is leaking under the vehicle.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.223,0,0,0,0,0.0,0.0,0.828
+radiator_fan_broken,Radiator fan not working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.276,0,0,0,0,0.0,0.0,0.83
+steam_bonnet,Steam coming from the bonnet.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.205,0,0,1,1,0.0,0.0,0.839
+radiator_clog,Radiator clogged or dirty.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.285,0,0,0,0,0.0,0.0,0.836
+misfire,My engine misfires or runs rough.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.197,0,0,1,1,0.0,0.0,0.828
+engine_wont_start,Engine won’t start.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.239,0,1,1,1,0.0,0.0,0.825
+exhaust_smoke,White or blue smoke from exhaust.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.2,0,1,1,1,0.0,0.0,0.797
+check_engine_light,Check Engine Light is on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.256,0,1,1,1,0.009,0.051,0.833
+overheat_freq,Engine overheating frequently.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.0,0.0,0.827
+battery_warning,Battery warning light is on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.211,1,1,1,1,0.0,0.0,0.83
+hybrid_noise,Strange engine noise when switching between electric and fuel.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.313,0,1,1,1,0.0,0.0,0.828
+hybrid_mpg_drop,Hybrid fuel economy suddenly drops.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.331,0,1,1,1,0.0,0.0,0.83
+regen_brake_fail,Regenerative braking not working properly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.21,1,1,1,1,0.0,0.0,0.827
+engine_run_stopped,Engine keeps running even when stopped.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.325,0,0,1,1,0.0,0.0,0.818
+suv_pull,My SUV pulls to one side while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.192,0,0,1,1,0.0,0.0,0.835
+mpg_drop,Sudden drop in fuel efficiency.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.382,0,1,1,1,0.0,0.0,0.829
+jerky_shift,Jerky gear shifting (automatic SUV).,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.207,0,1,1,1,0.0,0.0,0.831
+4wd_fail,4x4 or AWD not engaging.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.235,1,1,1,1,0.0,0.0,0.824
+towing_overheat,Engine overheating during towing or uphill driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.344,0,1,1,1,0.0,0.0,0.836
+suspension_bounce,Suspension feels bouncy or too stiff.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.316,1,1,1,1,0.0,0.0,0.828
+tire_heat,My tire heats up quickly while driving. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.362,0,0,0,0,0.0,0.0,0.834
+tire_burst_cause,My tire burst suddenly. What went wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.207,0,0,0,0,0.0,0.0,0.823
+rim_bent,My rim is bent or not fitting the tire properly. What should I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.23,0,1,1,1,0.0,0.0,0.833
+car_shake_speed,My car shakes when I drive fast. Could it be tire unbalancing?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.232,0,1,1,1,0.0,0.0,0.833
+tire_pull,My vehicle pulls to one side. Is it a tire issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.271,0,0,0,0,0.0,0.0,0.832
+tire_slow_leak,My tire keeps losing air slowly. What’s the cause?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.38,1,1,1,1,0.0,0.0,0.822
+tubeless_flat,My tubeless tire goes flat overnight. What should I check?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.337,0,0,1,1,0.0,0.0,0.838
+rear_tire_wear,My rear tire wears faster than the front. Is that normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.305,0,1,1,1,0.0,0.0,0.825
+tire_noise,Why does my tire make a humming or whining noise?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.325,1,1,1,1,0.0,0.0,0.834
+tire_skid,My tire tread looks fine but still skids. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.275,0,0,0,0,0.0,0.0,0.825
+gear_shift_issue,My vehicle is not shifting into gear properly. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.273,0,1,1,1,0.0,0.0,0.829
+gear_slip_neutral,My gear slips back into neutral while driving. What’s the cause?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.221,0,1,1,1,0.0,0.0,0.835
+gear_grind_shift,My gear makes a grinding noise when I shift. Is that serious?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.203,0,1,1,1,0.0,0.0,0.829
+loose_gear_lever,The gear lever feels loose or wobbly. What does that mean?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.208,0,0,0,0,0.0,0.0,0.828
+stuck_park,My automatic car is stuck in ‘Park’ and won’t shift. What do I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.367,0,0,0,0,0.0,0.0,0.831
+soft_clutch,My clutch pedal feels very soft or goes to the floor. What’s wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.362,1,1,1,1,0.009,0.05,0.825
+bike_gear_jam,My gear pedal on the bike feels jammed or stiff. What should I do?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.268,0,0,0,0,0.0,0.0,0.831
+delayed_shift,My vehicle takes time to respond after I shift gears. Is that normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.195,0,0,1,1,0.0,0.0,0.822
+4wd_stuck,My SUV or 4x4 won’t shift into or out of 4WD mode. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.533,0,1,1,1,0.0,0.049,0.821
+gear_whine,I hear whining or humming while driving in gear. Is it a gear issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.244,0,0,0,0,0.0,0.0,0.83
+superbike_heat,My superbike gets extremely hot after short rides. Is that normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.265,0,0,0,0,0.009,0.049,0.831
+supercar_mpg,My supercar gives very low mileage. Is there a fix?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.246,0,0,0,0,0.0,0.0,0.836
+brake_fade_race,The brakes in my racing vehicle feel less responsive at high speed. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.363,0,1,1,1,0.0,0.0,0.821
+chain_loosen,My superbike chain keeps loosening. Is it normal?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.231,0,0,0,0,0.0,0.0,0.835
+stiff_suspension,My supercar’s suspension feels too stiff on normal roads.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.235,0,0,0,0,0.0,0.0,0.831
+race_clutch_wear,The clutch in my sports car feels very hard or wears out fast.,"I'm your automotive diagnostic assistant, so I can only help with vehicle-related questions. 
+      ...",0.002,0,0,0,0,0.0,0.032,0.745
+high_speed_vibrate,My superbike vibrates excessively above 100 km/h. Is that unsafe?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.588,0,0,0,0,0.0,0.0,0.834
+supercar_tire_wear,The tyres on my supercar wear out very quickly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.298,0,0,0,0,0.0,0.0,0.833
+dash_warning_freq,I see warning lights frequently on my dashboard. Should I worry?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.201,0,1,1,1,0.0,0.0,0.825
+race_grip_loss,My racing car/bike loses grip or slides during fast turns. What’s wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.416,0,0,0,0,0.0,0.0,0.832
+aero_instability,My vehicle's aerodynamics seem to cause instability at high speeds.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.322,0,0,0,0,0.0,0.0,0.829
+high_rev_no_speed,My engine revs very high but the speed doesn’t increase equally.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.425,0,1,1,1,0.009,0.057,0.828
+fuel_needle_flux,My fuel needle fluctuates or goes down too quickly in a race vehicle.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.271,0,0,0,0,0.011,0.105,0.833
+rpm_drop_bike,My bike’s RPM drops suddenly during fast rides. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.26,0,1,1,1,0.0,0.0,0.82
+ecu_error,My supercar throws ECU or sensor error codes frequently.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.653,0,0,0,0,0.0,0.0,0.835
+lights_flicker_wire,My vehicle's lights randomly flicker while driving. Is this a wiring problem?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.217,0,0,1,1,0.0,0.0,0.824
+horn_fail_wire,The horn stopped working suddenly. Could the wire be damaged?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.259,0,0,0,0,0.0,0.0,0.828
+blinker_fast,My indicator blinks very fast or not at all. What’s wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.294,0,0,0,0,0.0,0.0,0.828
+cluster_lights_fail,Speedometer or fuel meter lights don’t turn on at night.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.304,1,1,1,1,0.0,0.0,0.838
+parasitic_drain,Battery drains quickly even when the vehicle is off. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.229,0,0,0,0,0.0,0.0,0.83
+ebike_cutoff,My electric bike/scooter suddenly turned off and won’t start again.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.289,0,0,0,0,0.0,0.0,0.835
+fuse_blows,Fuse keeps blowing when I turn on headlights or indicators. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.305,0,0,0,0,0.0,0.0,0.832
+aftermarket_issues,"After installing aftermarket lights/audio, my vehicle misbehaves electrically.","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.207,0,0,0,0,0.0,0.0,0.83
+fuel_gauge_jump,My fuel gauge needle is stuck or jumping randomly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.34,0,0,0,0,0.0,0.0,0.825
+no_crank_wire,My vehicle won’t crank even though battery is full. Could it be a wiring fault?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.283,0,0,0,0,0.0,0.0,0.823
+rear_light_fail,My rear lights don't work even after bulb replacement. What could be the issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.302,0,0,0,0,0.0,0.0,0.831
+dash_errors,The dashboard shows multiple error lights suddenly. Is this an electrical issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.258,0,0,0,0,0.0,0.0,0.826
+wiper_intermittent,My wipers or blower motor work only intermittently.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.278,0,0,0,0,0.0,0.0,0.831
+electric_shock,My vehicle keeps getting electric shocks or spark near terminals.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.26,0,0,0,0,0.0,0.0,0.825
+reverse_light_switch,My reverse lights don’t come on even when gear is engaged.,"Step 1: Check reverse light fuse.
+Step 2: Inspect bulb and socket for damage.
+Step 3: Check wiring a...",0.679,0,0,0,0,0.087,0.432,0.938
+fuel_smell,I smell petrol around my bike/car. Is this a leakage?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.633,1,1,1,1,0.0,0.0,0.83
+gas_smell_cng,My CNG/LPG vehicle is giving off a strong gas smell.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.245,0,1,1,1,0.009,0.053,0.84
+ac_hot_air,My car's air conditioner doesn’t cool enough or blows hot air.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.338,1,1,1,1,0.0,0.0,0.829
+stereo_fail,The car stereo or infotainment system doesn’t work.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.262,0,0,0,0,0.0,0.0,0.832
+seat_stuck,One of my seats is stuck or doesn’t move forward/backward.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.27,0,0,0,0,0.0,0.0,0.828
+window_stuck,My power window is stuck half-way or makes noise.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.271,0,1,1,1,0.0,0.0,0.83
+dash_warning_stuck,The dashboard warning lights stay ON even when the car is fine.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.328,0,0,0,0,0.0,0.0,0.831
+fuel_gauge_error,Fuel gauge shows wrong reading or is stuck.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.219,0,0,0,0,0.009,0.053,0.832
+burning_smell_cabin,My cabin smells like something is burning.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.371,0,0,0,0,0.0,0.0,0.839
+vibration_ac,My car vibrates when I turn on AC or stop at a signal.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.264,0,0,0,0,0.009,0.051,0.833
+water_in_light,There’s water inside the headlight or tail light housing.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.343,1,1,1,1,0.0,0.0,0.829
+start_stall,Vehicle starts but stalls within seconds.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.257,0,0,0,0,0.0,0.0,0.827
+jerk_accel,My vehicle jerks while accelerating or feels sluggish.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.24,0,0,0,0,0.0,0.0,0.817
+fan_no_air,My cabin fan works but no air comes from vents.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.331,0,0,0,0,0.0,0.0,0.837
+seat_squeak,My seats or dashboard make creaking sounds while driving.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.235,0,0,0,0,0.0,0.0,0.817
+door_lock_fail,My automatic car doors lock but won’t unlock / stay stuck.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.256,0,0,0,0,0.0,0.0,0.828
+door_handle_loose,My car’s door handle is loose or not opening the door.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.425,0,0,0,0,0.0,0.051,0.827
+handbrake_stuck,My vehicle's handbrake (parking brake) doesn't hold or is stuck.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.251,0,0,0,0,0.0,0.053,0.825
+shifter_stuck,My automatic gear gets stuck or won’t shift smoothly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.344,0,0,0,0,0.0,0.0,0.828
+mirror_fold_fail,The rearview mirrors don’t fold or adjust electronically.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.25,0,0,0,0,0.009,0.05,0.832
+wipers_stuck,My windshield wipers don’t work or are stuck.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.294,1,1,1,1,0.0,0.0,0.825
+washer_fail,The washer spray doesn’t clean the windshield.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.258,0,0,0,0,0.0,0.0,0.828
+rain_sensor_fail,My rain-sensing wipers turn on randomly or don’t work.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.407,1,1,1,1,0.0,0.0,0.836
+camera_fail,My vehicle’s rearview camera or parking sensors stopped working.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.307,0,0,0,0,0.009,0.048,0.825
+bonnet_stuck,The bonnet (hood) doesn’t open even after pulling the lever.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.247,0,0,0,0,0.009,0.089,0.824
+trunk_pop,My boot/trunk doesn’t lock or pops open randomly.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.446,0,0,0,0,0.0,0.0,0.822
+remote_unlock_fail,My car won’t unlock with the key or remote.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.386,0,0,0,0,0.0,0.0,0.829
+window_wont_move,My car’s power window won’t go up or down. What could be the problem?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.282,0,0,0,0,0.0,0.0,0.83
+windshield_chip,"There’s a small chip in my side window. Will it spread, and what should I do?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.194,0,0,0,0,0.0,0.0,0.832
+door_wont_shut,My car door doesn’t shut properly and sometimes won’t open. What’s wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.277,0,0,0,0,0.0,0.053,0.832
+handle_loose_replace,My door handle feels loose and won’t open the door. Do I need to replace it?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.333,0,1,1,1,0.0,0.0,0.828
+lights_stopped,My car’s headlights and taillights suddenly stopped working. What could be the issue?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.282,1,1,1,1,0.0,0.0,0.826
+indicator_solid,"When I turn on my indicators, they stay solid or blink rapidly. What does that mean?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.251,0,0,1,1,0.0,0.0,0.833
+ignition_switch_fault,My car won’t start even though the battery is okay. Could the ignition switch be faulty?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.227,0,1,1,1,0.0,0.0,0.821
+driver_window_switch,"The power window on the driver side doesn’t work, but the others do. What’s wrong?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.259,0,0,0,0,0.0,0.0,0.835
+headlight_flick_switch,My headlights only turn on after flicking the switch multiple times. Why is that?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.305,0,0,0,0,0.0,0.0,0.836
+indicator_stalk,The indicator switch doesn’t hold the position anymore. It turns off automatically or doesn’t stay on.,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.47,0,0,0,0,0.0,0.061,0.838
+ac_switch_light,My AC switch light turns on but no cool air comes out. Could the switch be faulty?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.38,0,0,0,0,0.0,0.0,0.831
+hazard_one_side,"When I press the hazard light switch, only one side blinks. Is the switch at fault?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.397,0,0,0,0,0.0,0.0,0.836
+wiper_speed_fail,"My car's wiper switch doesn’t work on low speed, only high speed. What could be the reason?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.202,0,0,1,1,0.0,0.0,0.834
+dimmer_fail,The dashboard backlight dimmer doesn’t respond. Is it a switch problem?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.306,0,1,1,1,0.0,0.0,0.825
+passenger_lock_switch,The door lock switch doesn’t work on the passenger side. Driver side works fine. Any fix?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.431,1,1,1,1,0.009,0.049,0.829
+defogger_fail,My rear defogger doesn’t activate when I press the switch. Why?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.258,0,1,1,1,0.0,0.0,0.828
+trunk_switch_fail,"Every time I press the trunk release switch, nothing happens. Is the switch broken?","I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.32,1,1,1,1,0.0,0.0,0.832
+cruise_light_fail,My cruise control light won’t turn on when I press the button. Any help?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.425,1,1,1,1,0.0,0.0,0.828
+fog_light_switch,The fog light switch works intermittently. What causes this?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.27,0,0,1,1,0.0,0.0,0.822
+mirror_switch_left,Only the left mirror adjust switch is not working. Right side adjusts fine. Any fix?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.287,1,1,1,1,0.0,0.0,0.839
+fuel_lid_switch,My fuel tank lid won’t open when I press the release switch. What could be wrong?,"I apologize, but I don't have specific technical information in my database regarding this issue. I ...",0.366,1,1,1,1,0.0,0.0,0.831

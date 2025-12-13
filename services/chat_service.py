@@ -170,7 +170,6 @@ class ChatService:
                 return {**inputs, "diagnosis_output": "I apologize, I missed that. How can I help with your vehicle?"}
         
         return RunnableLambda(simple_response)
-
     def _create_rag_chain(self) -> RunnableSerializable:
         """Create the RAG processing chain"""
         async def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,66 +193,33 @@ class ChatService:
                 logger.error(f"Image analysis failed: {e}", exc_info=True)
                 return {"context_1": "Image analysis failed", **inputs}
 
-        # def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        #     """Retrieve relevant information from vector store"""
-        #     try:
-        #         vehicle = inputs.get("vehicle", {})
-        #         prompt = inputs["prompt"]
-        #         chat_history = inputs.get("chat_history", [])
-
-        #         # Get last 2 user messages for context
-        #         history_context = "\n".join(
-        #             [msg.content for msg in chat_history[-4:] if hasattr(msg, 'content')]
-        #         )
-
-        #         # Build context-aware query
-        #         is_model_specific = any(word in prompt.lower() for word in [
-        #             "where is", "location", "specific", "particular", "this model",
-        #             "my model", "different", "varies", "compatible"
-        #         ])
-
-        #         enhanced_question = (
-        #             f"Conversation Context:\n{history_context}\n\n"
-        #             f"User Query: {prompt}"
-        #         )
-
-        #         # Only add vehicle details if the query seems to need model-specific info
-        #         if is_model_specific:
-        #             enhanced_question += f"\nVehicle Details: {vehicle.get('brand', '')} {vehicle.get('model', '')} {vehicle.get('year', '')}"
-
-        #         # Manual embedding and search
-        #         query_embedding = embed_text(enhanced_question)
-                
-        #         # Manual similarity search
-        #         docs_and_scores = self.vectorstore.similarity_search_by_vector(
-        #             query_embedding,
-        #             k=3,
-        #             filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
-        #         )
-                
-        #         # Combine text and image context
-        #         text_context = "\n---\n".join([doc.page_content for doc in docs_and_scores])
-        #         multimodal_context = []
-                
-        #         for doc in docs_and_scores:
-        #             if doc.metadata.get("type") == "image":
-        #                 image_id = doc.metadata.get("image_id")
-        #                 if image_id in self.image_data_store:
-        #                     multimodal_context.append({
-        #                         "type": "image_url",
-        #                         "image_url": {
-        #                             "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
-        #                         }
-        #                     })
-                
-        #         return {
-        #             **inputs,
-        #             "context_2": text_context,
-        #             "multimodal_context": multimodal_context
-        #         }
-        #     except Exception as e:
-        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
-        #         return {**inputs, "context_2": "Knowledge retrieval failed"}
+        async def query_expansion_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+            """Rewrite user query to be more search-friendly"""
+            original_prompt = inputs["prompt"]
+            
+            expansion_prompt = f"""
+            You are an AI assistant optimizing queries for a vehicle manual search engine.
+            Generate a search query based on the user's input.
+            1. Keep it specific to automotive technical terms.
+            2. Remove conversational filler.
+            3. If the user mentions "it" or "that", use the chat history to define the object.
+            
+            Chat History: {inputs.get('chat_history', [])}
+            User Input: {original_prompt}
+            
+            Output ONLY the optimized search query.
+            """
+            
+            # Call a cheaper/faster model for this if possible
+            optimized_query = await self.diagnostic_agent.ainvoke({
+                "system_prompt": "You are a query optimizer.",
+                "input": expansion_prompt,
+                "chat_history": [],
+                "is_simple_response": True 
+            })
+            
+            # Update the prompt used for RETRIEVAL, but keep original for Generation
+            return {**inputs, "search_query": optimized_query.strip()}
 
         def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """
@@ -262,57 +228,35 @@ class ChatService:
             """
             try:
                 vehicle = inputs.get("vehicle", {})
-                prompt = inputs["prompt"]
                 chat_history = inputs.get("chat_history", [])
-                # 2. Prepare the Search Query (STRICTLY ENGLISH)
-                # inputs["prompt"] is already translated to English by your Sandwich Processor
-                search_query = str(inputs["prompt"]) 
                 
-                # 3. Embed ONLY the English translation
-                # This ensures the vector aligns perfectly with your English Vector DB
+                # 1. Use the Optimized Query from expansion chain
+                search_query = inputs.get("search_query", inputs["prompt"])
+                
+                # 2. Embed ONLY the English translation/optimized query
                 query_embedding = embed_text(search_query)
-                # Get last 4 messages for context
-                history_context = "\n".join(
-                [str(msg.content) for msg in chat_history[-2:] if hasattr(msg, 'content') and msg.content is not None]
-                )
+                
+                # 3. Increase K to improve Top-5 metrics
+                k_value = 5 
 
-                prompt = str(inputs["prompt"])  # ensure prompt is string
-
-                enhanced_question = f"Conversation Context:\n{history_context}\n\nUser Query: {prompt}"
-                query_embedding = embed_text(enhanced_question)
-
-
-                # --- FAISS similarity search with scores ---
-                # docs_and_scores = self.vectorstore.similarity_search_with_score(
-                #     # query_embedding,
-                #     enhanced_question,
-                #     k=3,
-                #     filter={"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
-                # )
-
-                # 3. Setup Filter (Try specific brand first)
+                # 4. Setup Filter (Try specific brand first)
                 search_filter = {"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 
-                # 4. First Search Attempt (Specific)
+                # 5. First Search Attempt (Specific)
                 docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
                     query_embedding,
-                    k=3,
+                    k=k_value,
                     filter=search_filter
                 )
 
-                # --- FIX START: FALLBACK SEARCH ---
-                # If no results found with filter, try again WITHOUT filter
+                # 6. Fallback Search (If filter blocked results)
                 if not docs_and_scores and search_filter:
                     logger.info("No documents found with brand filter. Retrying without filter.")
                     docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
                         query_embedding,
-                        k=3,
-                        filter=None  # Remove the constraint
+                        k=k_value,
+                        filter=None
                     )
-                # Debug: raw docs_and_scores
-                print("\n=== Raw docs_and_scores ===")
-                print(docs_and_scores)
-                print("===========================\n")
 
                 # Normalize docs_and_scores to list of (Document, score)
                 normalized = []
@@ -321,30 +265,29 @@ class ChatService:
                         doc, score = item
                     elif hasattr(item, "page_content"):
                         doc = item
-                        score = None
+                        score = None # Should ideally not happen with search_with_score
                     else:
-                        logger.warning(f"Unexpected item format in docs_and_scores: {item}")
                         continue
                     normalized.append((doc, score))
 
-                # Debug: print retrieved docs and scores
-                print("\n=== Retrieval Debug ===")
-                print(f"Query: {prompt}")
-                print("Retrieved documents and scores:")
-                for idx, (doc, score) in enumerate(normalized):
-                    doc_id = doc.metadata.get("source", "unknown")
-                    print(f"{idx+1}. doc_id: {doc_id}, score: {score}")
-                print("======================\n")
+                # --- NEW: Relevancy Check & Filtering ---
+                valid_docs = []
+                for doc, score in normalized:
+                    # Threshold: Adjust based on your vector store metric
+                    # If using Cosine similarity (0 to 1), < 0.65 might be irrelevant
+                    # If using L2 distance, > threshold is irrelevant
+                    if score is not None and score < 0.65: 
+                        continue 
+                    valid_docs.append(doc)
+                
+                if not valid_docs:
+                    text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                else:
+                    text_context = "\n---\n".join([doc.page_content for doc in valid_docs])
 
-                # Extract docs list
-                docs = [doc for doc, _ in normalized]
-
-                # Build text context
-                text_context = "\n---\n".join([doc.page_content for doc in docs])
-
-                # Build multimodal context (for images)
+                # Build multimodal context (for images) based on valid docs
                 multimodal_context = []
-                for doc, _ in normalized:
+                for doc in valid_docs:
                     if doc.metadata.get("type") == "image":
                         image_id = doc.metadata.get("image_id")
                         if image_id in self.image_data_store:
@@ -355,10 +298,11 @@ class ChatService:
                                 }
                             })
 
-                # Build retrieved_context for evaluation
+                # Build retrieved_context for evaluation (Keep originals for metrics)
                 retrieved_context = [
                     {
                         "doc_id": doc.metadata.get("source", "unknown"),
+                        "page": doc.metadata.get("page", "unknown"),
                         "score": round(score, 3) if isinstance(score, (int, float)) else None
                     }
                     for doc, score in normalized
@@ -383,6 +327,10 @@ class ChatService:
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:
+                # --- NEW: Hallucination Guardrail Check ---
+                if "NO_RELEVANT_TECHNICAL_DATA_FOUND" in inputs.get('context_2', ''):
+                    return {**inputs, "diagnosis_output": "I apologize, but I don't have specific technical information in my database regarding this issue. I recommend consulting a professional mechanic."}
+
                 vehicle = inputs.get("vehicle", {})
                 vehicle_info = {
                     "make": vehicle.get("brand", "Unknown"),
@@ -423,7 +371,6 @@ class ChatService:
                 is_exact = any(w in user_prompt_lower for w in exact_keywords)
                 if is_exact:
                     # OPTION A: User wants exact/custom format -> NO SYSTEM OVERRIDE
-                    # We leave instructions empty or tell AI to obey user strictly
                     format_instructions = """
                     STYLE: **OBEY USER INSTRUCTIONS**.
                     - The user has requested a specific format (e.g., exact words).
@@ -454,7 +401,16 @@ class ChatService:
                 You are a skilled automotive technician using logical troubleshooting.
 
 VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
+### GOLD STANDARD EXAMPLES ###
+                Q: My car overheats in traffic.
+                A: Step 1: Check if the radiator fan turns on when hot. 
+                   Step 2: Inspect coolant levels in the reservoir.
+                   Step 3: If levels are good, the thermostat may be stuck.
 
+                Q: Brakes are squeaking.
+                A: Step 1: Inspect brake pads for wear indicators.
+                   Step 2: Check for debris trapped in the caliper.
+                ### END EXAMPLES ###
 LANGUAGE CONSTRAINT (VIOLATION WILL CAUSE SYSTEM FAILURE):
                 - **OUTPUT MUST BE IN ENGLISH ONLY**.
                 - The chat history contains Urdu/Local languages. **IGNORE THEM**.
@@ -518,10 +474,10 @@ Current User Query: "{inputs['prompt']}""
         return (
             RunnablePassthrough()
             | RunnableLambda(image_analysis_chain)
+            | RunnableLambda(query_expansion_chain)
             | RunnableLambda(retrieval_chain)
             | RunnableLambda(diagnostic_chain)
         )
-
     def _create_off_topic_chain(self) -> RunnableSerializable:
         """Chain for handling off-topic or inappropriate conversations"""
         async def off_topic_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
