@@ -60,7 +60,7 @@ def create_diagnostic_agent(api_key: str):
             else:
                 model = "llama-3.3-70b-versatile"
                 temperature = 0.3
-                max_tokens = 1024
+                max_tokens = 800
 
             messages = [{"role": "system", "content": system_prompt}]
             

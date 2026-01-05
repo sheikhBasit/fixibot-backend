@@ -1,5 +1,6 @@
 from services.multimodal_embeddings import embed_text
 from fastapi import Request
+import asyncio
 from langchain_core.runnables import (
     RunnableSerializable,
     RunnablePassthrough,
@@ -170,6 +171,47 @@ class ChatService:
                 return {**inputs, "diagnosis_output": "I apologize, I missed that. How can I help with your vehicle?"}
         
         return RunnableLambda(simple_response)
+    
+    async def stream_message(
+        self,
+        session: ChatSession,
+        user_input_data: Dict[str, Any],
+        image_url: Optional[str] = None,
+        vehicle: Optional[VehicleModel] = None
+    ):
+        """Streaming version of process_message for low-latency responses."""
+        try:
+            english_text = user_input_data["english_translation"]
+            intent = user_input_data["intent"]
+
+            chain_inputs = {
+                "prompt": english_text,
+                "image_url": image_url,
+                "vehicle": vehicle.model_dump() if vehicle else {},
+                "chat_history": session.chat_history,
+                "intent": intent
+            }
+
+            processing_path = self._determine_processing_path(intent, english_text, bool(image_url))
+            
+            if processing_path == "off_topic":
+                chain = self._create_off_topic_chain()
+            elif processing_path == "simple":
+                chain = self._create_simple_response_chain()
+            else:
+                chain = self._create_rag_chain()
+
+            # 🔥 Use astream() to yield chunks to the FastAPI route
+            async for chunk in chain.astream(chain_inputs):
+                if isinstance(chunk, dict) and "diagnosis_output" in chunk:
+                    yield chunk["diagnosis_output"]
+                elif isinstance(chunk, str):
+                    yield chunk
+
+        except Exception as e:
+            logger.error(f"Streaming in ChatService failed: {e}")
+            yield "I encountered an error while processing your request."
+    
     def _create_rag_chain(self) -> RunnableSerializable:
         """Create the RAG processing chain"""
         async def image_analysis_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -225,7 +267,15 @@ class ChatService:
             # Update the prompt used for RETRIEVAL, but keep original for Generation
             return {**inputs, "search_query": optimized_query.strip()}
 
-        def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        async def parallel_step(inputs: Dict[str, Any]):
+            """Runs expansion and image analysis at the same time to reduce latency."""
+            expansion_task = query_expansion_chain(inputs)
+            image_task = image_analysis_chain(inputs)
+            results = await asyncio.gather(expansion_task, image_task)
+            # Combine results from both chains
+            return {**results[0], **results[1]}
+
+        async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """
             Retrieve relevant information from vector store with proper score handling
             and expose retrieved documents for testing/evaluation.
@@ -238,14 +288,14 @@ class ChatService:
                 search_query = inputs.get("search_query", inputs["prompt"])
                 
                 # 2. Embed ONLY the English translation/optimized query
-                query_embedding = embed_text(search_query)
+                query_embedding = await embed_text(search_query)
                 
                 # 3. Increase K to improve Top-5 metrics
                 k_value = 5 
 
                 
                 # 5. First Search Attempt (Specific)
-                docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
+                docs_and_scores = await self.vectorstore.asimilarity_search_with_score_by_vector(
                     query_embedding,
                     k=k_value,
                     filter=None
@@ -466,8 +516,7 @@ Current User Query: "{inputs['prompt']}""
         
         return (
             RunnablePassthrough()
-            | RunnableLambda(image_analysis_chain)
-            | RunnableLambda(query_expansion_chain)
+            | RunnableLambda(parallel_step)
             | RunnableLambda(retrieval_chain)
             | RunnableLambda(diagnostic_chain)
         )

@@ -20,12 +20,13 @@ def initialize_clip_model():
             try:
                 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
                 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                clip_model.eval()  # Set model to evaluation mode
                 print("[INFO] CLIP model initialized successfully.")
             except Exception as e:
                 print(f"[CRITICAL] Failed to initialize CLIP model: {e}")
                 raise
 
-def embed_image(image_data):
+async def embed_image(image_data):
     """Embed image using CLIP"""
     initialize_clip_model()  # Ensure model is loaded
     print(f"[DEBUG] Embedding image of type: {type(image_data)}")
@@ -46,10 +47,10 @@ def embed_image(image_data):
         print(f"[ERROR] Image embedding failed: {e}")
         raise
 
-def embed_text(text):
+async def embed_text(text):
     """Embed text using CLIP."""
     initialize_clip_model()  # Ensure model is loaded
-    print(f"[DEBUG] Embedding embed_text : {text[:50]}...")
+    print(f"[DEBUG] Embedding text: {text[:50]}...")
     try:
         inputs = clip_processor(
             text=text,

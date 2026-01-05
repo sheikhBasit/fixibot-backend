@@ -14,10 +14,8 @@ from middlewares.security_handler import SecurityHeadersMiddleware
 from services.diagnostic_agent import create_diagnostic_agent
 from services.multimodal_embeddings import initialize_clip_model
 from services.image_analyzer import ImageAnalyzer
-# from services.vectorstore import process_pdf_with_images
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.staticfiles import StaticFiles
-# from services.intent_classifier import IntentClassifier
 from services.simple_responses import SimpleResponseGenerator
 # App imports
 from routes import chat, health, mechanic, mechanic_service, self_help, user, vehicle, feedback, ai_service, analytics, admin, support  
@@ -82,7 +80,7 @@ async def initialize_services():
             else:
                 logger.info("Cache not found, processing PDF...")
                 from services.vectorstore import process_pdf_with_images
-                app.state.vectorstore, app.state.image_data_store = process_pdf_with_images(
+                app.state.vectorstore, app.state.image_data_store = await process_pdf_with_images(
                     settings.KNOWLEDGE_BASE_PDF,
                     cache_dir=settings.VECTOR_CACHE_DIR
                 )
