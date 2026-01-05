@@ -198,17 +198,21 @@ class ChatService:
             original_prompt = inputs["prompt"]
             
             expansion_prompt = f"""
-            You are an AI assistant optimizing queries for a vehicle manual search engine.
-            Generate a search query based on the user's input.
-            1. Keep it specific to automotive technical terms.
-            2. Remove conversational filler.
-            3. If the user mentions "it" or "that", use the chat history to define the object.
-            
-            Chat History: {inputs.get('chat_history', [])}
-            User Input: {original_prompt}
-            
-            Output ONLY the optimized search query.
-            """
+    You are an AI assistant optimizing queries for a vehicle manual search engine.
+    
+    USER INPUT: {original_prompt}
+    CHAT HISTORY: {inputs.get('chat_history', [])}
+    
+    INSTRUCTIONS:
+    1. Generate a search query using ONLY technical automotive keywords.
+    2. Remove all conversational filler (e.g., "what's going on", "can you help").
+    3. DO NOT USE SQL (no SELECT, WHERE, or LIKE statements).
+    4. DO NOT use quotes or special characters.
+    5. If the user mentions "it", identify what "it" is from the chat history.
+    
+    OUTPUT: Just the keywords.
+    Example: "engine starting failure battery alternator starter"
+    """
             
             # Call a cheaper/faster model for this if possible
             optimized_query = await self.diagnostic_agent.ainvoke({
@@ -239,24 +243,13 @@ class ChatService:
                 # 3. Increase K to improve Top-5 metrics
                 k_value = 5 
 
-                # 4. Setup Filter (Try specific brand first)
-                search_filter = {"vehicle_make": vehicle.get("brand")} if vehicle.get("brand") else None
                 
                 # 5. First Search Attempt (Specific)
                 docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
                     query_embedding,
                     k=k_value,
-                    filter=search_filter
+                    filter=None
                 )
-
-                # 6. Fallback Search (If filter blocked results)
-                if not docs_and_scores and search_filter:
-                    logger.info("No documents found with brand filter. Retrying without filter.")
-                    docs_and_scores = self.vectorstore.similarity_search_with_score_by_vector(
-                        query_embedding,
-                        k=k_value,
-                        filter=None
-                    )
 
                 # Normalize docs_and_scores to list of (Document, score)
                 normalized = []
@@ -276,7 +269,7 @@ class ChatService:
                     # Threshold: Adjust based on your vector store metric
                     # If using Cosine similarity (0 to 1), < 0.65 might be irrelevant
                     # If using L2 distance, > threshold is irrelevant
-                    if score is not None and score < 0.65: 
+                    if score is not None and score > 1.2: # Example threshold for "too far away"
                         continue 
                     valid_docs.append(doc)
                 

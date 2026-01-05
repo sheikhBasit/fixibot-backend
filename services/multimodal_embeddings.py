@@ -49,7 +49,7 @@ def embed_image(image_data):
 def embed_text(text):
     """Embed text using CLIP."""
     initialize_clip_model()  # Ensure model is loaded
-    print(f"[DEBUG] Embedding text: {text[:50]}...")
+    print(f"[DEBUG] Embedding embed_text : {text[:50]}...")
     try:
         inputs = clip_processor(
             text=text,
