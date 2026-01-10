@@ -1,0 +1,92 @@
+[
+  {
+    "id": "car_click_no_start",
+    "question": "Guys my car wont start today. It just makes this rapid clicking noise when I turn the key. Lights work fine. Is it the starter?",
+    "reference_answer": "The clicking sound typically indicates the starter motor is not getting enough current. This usually means the battery is dead or has poor connections.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 0"
+    ]
+  },
+  {
+    "id": "car_overheat_highway",
+    "question": "Help! Engine temp gauge shot up to red while driving on the highway. I pulled over. What do I do now?",
+    "reference_answer": "Turn off the engine immediately. Do not open the radiator cap while it is hot. Wait for it to cool down.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 0"
+    ]
+  },
+  {
+    "id": "brake_wobble",
+    "question": "Why does my steering wheel shake like crazy when I brake at high speeds? Its really scary.",
+    "reference_answer": "This is likely due to warped brake rotors.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 0"
+    ]
+  },
+  {
+    "id": "wrong_fuel_diesel",
+    "question": "URGENT: I accidentally filled my diesel car with petrol. I havent started it yet. What happens if I drive it?",
+    "reference_answer": "Do NOT start the engine. Petrol in a diesel engine can damage the fuel pump and injectors.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 0"
+    ]
+  },
+  {
+    "id": "flat_tire_symptoms",
+    "question": "Car feels weird, like its pulling to the left and making a thudding noise. Is this a flat?",
+    "reference_answer": "Yes, signs of a flat tire include pulling to one side and a thudding sound.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 1"
+    ]
+  },
+  {
+    "id": "steering_hard",
+    "question": "Steering wheel has become super heavy and hard to turn fast. Power steering pump issue?",
+    "reference_answer": "Hard steering is often due to low power steering fluid or a faulty pump.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 1"
+    ]
+  },
+  {
+    "id": "dim_lights",
+    "question": "My headlights are super dim at night. I already changed the bulbs but no difference.",
+    "reference_answer": "If new bulbs didn't fix it, check for a weak battery or corroded ground wires.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 1"
+    ]
+  },
+  {
+    "id": "bike_start_battery_ok",
+    "question": "My motorcycle cranks but wont fire up. Battery is brand new. What else could it be?",
+    "reference_answer": "Check the kill switch, spark plug, and fuel flow.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 47"
+    ]
+  },
+  {
+    "id": "scooter_jerk",
+    "question": "My scooter jerks and hesitates when I try to accelerate from a stop. CVT belt?",
+    "reference_answer": "Jerking can be caused by a worn CVT belt or clutch slippage.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 48"
+    ]
+  },
+  {
+    "id": "bike_shutoff_riding",
+    "question": "Riding my heavy bike and it just cut out completely on the highway. Scary. Engine shut off.",
+    "reference_answer": "Sudden shutoff can be fuel starvation or ignition failure.",
+    "relevant_doc_ids": [
+      "Vehicle_Breakdown_Queries",
+      "Page: 48"
+    ]
+  }
+]

@@ -12,38 +12,69 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# Ensure these are imported from your actual service file
 from services.multimodal_embeddings import embed_text, embed_image
 from services.vector_cache import CacheLoadError, VectorCache
 
 async def process_pdf_with_images(pdf_path: str, cache_dir: str = ".vector_cache", force_reprocess: bool = False) -> Tuple[FAISS, dict]:
+    """
+    Process PDF with Metadata Enrichment (Header/Topic Context) and Asynchronous Embedding.
+    """
     cache = VectorCache(cache_dir)
     cache_key = cache.get_cache_key(pdf_path)
 
     if not force_reprocess and cache.cache_exists(cache_key):
         try:
+            print(f"Loading cached vectorstore for {pdf_path}...")
             return cache.load_from_cache(cache_key)
         except CacheLoadError:
-            pass
+            print("Cache load failed, reprocessing PDF.")
 
+    print(f"Processing PDF: {pdf_path}")
     doc = fitz.open(pdf_path)
     all_docs = []
     embedding_tasks = []
     image_data_store = {}
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=300)
+    
+    # Adjusted chunk size for context
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
     try:
         for i, page in enumerate(doc):
-            # Process Text
+            # --- 1. Process Text with Context ---
             text = page.get_text()
+            
+            # Heuristic: Assume first line is the Header/Topic
+            # Clean it to remove excessive whitespace
+            header = text.split('\n')[0].strip() if text else "General"
+            
             if text.strip():
                 pdf_name = Path(pdf_path).stem
-                temp_doc = Document(page_content=text, metadata={"page": i, "type": "text", "source": pdf_name})
-                for chunk in text_splitter.split_documents([temp_doc]):
+                temp_doc = Document(
+                    page_content=text, 
+                    metadata={"page": i, "type": "text", "source": pdf_name}
+                )
+                
+                chunks = text_splitter.split_documents([temp_doc])
+                
+                for chunk in chunks:
+                    # A. Prepend Header to content for EMBEDDING (Better Retrieval)
+                    enhanced_content = f"Topic: {header}\nContent: {chunk.page_content}"
+                    
+                    # B. Add Header to Metadata (For display/LLM context)
+                    chunk.metadata["section_topic"] = header
+                    
+                    # C. Add to storage list (We store the original chunk, but embed the enhanced one)
                     all_docs.append(chunk)
-                    embedding_tasks.append(embed_text(chunk.page_content))
+                    
+                    # D. Add embedding task
+                    # Note: If embed_text is synchronous, wrap it in to_thread to avoid blocking
+                    if asyncio.iscoroutinefunction(embed_text):
+                        embedding_tasks.append(embed_text(enhanced_content))
+                    else:
+                        # Wrap sync calls if needed, or assume loop executor handles it
+                        embedding_tasks.append(asyncio.to_thread(embed_text, enhanced_content))
 
-            # Process Images
+            # --- 2. Process Images ---
             for img_index, img in enumerate(page.get_images(full=True)):
                 try:
                     xref = img[0]
@@ -57,22 +88,36 @@ async def process_pdf_with_images(pdf_path: str, cache_dir: str = ".vector_cache
 
                     all_docs.append(Document(
                         page_content=f"[Image: {image_id}]",
-                        metadata={"page": i, "type": "image", "image_id": image_id, "source": pdf_name}
+                        metadata={
+                            "page": i, 
+                            "type": "image", 
+                            "image_id": image_id, 
+                            "source": pdf_name,
+                            "section_topic": header # Tag image with the page header too!
+                        }
                     ))
-                    embedding_tasks.append(embed_image(pil_image))
+                    
+                    if asyncio.iscoroutinefunction(embed_image):
+                        embedding_tasks.append(embed_image(pil_image))
+                    else:
+                        embedding_tasks.append(asyncio.to_thread(embed_image, pil_image))
+                        
                 except Exception as e:
                     print(f"Error processing image {img_index} on page {i}: {e}")
 
         if not all_docs:
             raise ValueError("No content found in PDF.")
 
+        print(f"Generating embeddings for {len(embedding_tasks)} chunks...")
         # Execute embeddings in parallel
         all_embeddings = await asyncio.gather(*embedding_tasks)
 
         # Build HNSW Index
         dim = 512 
+        # Convert list of arrays to single numpy matrix
+        embeddings_matrix = np.array(all_embeddings).astype('float32')
         index = faiss.IndexHNSWFlat(dim, 32)
-        index.add(np.array(all_embeddings).astype('float32'))
+        index.add(embeddings_matrix)
 
         # Build Docstore and ID mapping
         docstore = InMemoryDocstore({})
@@ -93,6 +138,103 @@ async def process_pdf_with_images(pdf_path: str, cache_dir: str = ".vector_cache
         return vector_store, image_data_store
     finally:
         doc.close()
+
+# import asyncio
+# import io
+# import base64
+# import faiss
+# from pathlib import Path
+# from typing import Tuple
+# import fitz
+# import numpy as np
+# from PIL import Image
+# from uuid import uuid4
+# from langchain_core.documents import Document
+# from langchain_community.vectorstores import FAISS
+# from langchain_community.docstore.in_memory import InMemoryDocstore
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
+# # Ensure these are imported from your actual service file
+# from services.multimodal_embeddings import embed_text, embed_image
+# from services.vector_cache import CacheLoadError, VectorCache
+
+# async def process_pdf_with_images(pdf_path: str, cache_dir: str = ".vector_cache", force_reprocess: bool = False) -> Tuple[FAISS, dict]:
+#     cache = VectorCache(cache_dir)
+#     cache_key = cache.get_cache_key(pdf_path)
+
+#     if not force_reprocess and cache.cache_exists(cache_key):
+#         try:
+#             return cache.load_from_cache(cache_key)
+#         except CacheLoadError:
+#             pass
+
+#     doc = fitz.open(pdf_path)
+#     all_docs = []
+#     embedding_tasks = []
+#     image_data_store = {}
+#     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=300)
+
+#     try:
+#         for i, page in enumerate(doc):
+#             # Process Text
+#             text = page.get_text()
+#             header = text.split('\n')[0]
+#             if text.strip():
+#                 pdf_name = Path(pdf_path).stem
+#                 temp_doc = Document(page_content=text, metadata={"page": i, "type": "text", "source": pdf_name})
+#                 for chunk in text_splitter.split_documents([temp_doc]):
+#                     all_docs.append(chunk)
+#                     embedding_tasks.append(embed_text(chunk.page_content))
+
+#             # Process Images
+#             for img_index, img in enumerate(page.get_images(full=True)):
+#                 try:
+#                     xref = img[0]
+#                     base_image = doc.extract_image(xref)
+#                     pil_image = Image.open(io.BytesIO(base_image["image"])).convert("RGB")
+#                     image_id = f"page_{i}_img_{img_index}"
+
+#                     buffered = io.BytesIO()
+#                     pil_image.save(buffered, format="PNG")
+#                     image_data_store[image_id] = base64.b64encode(buffered.getvalue()).decode()
+
+#                     all_docs.append(Document(
+#                         page_content=f"[Image: {image_id}]",
+#                         metadata={"page": i, "type": "image", "image_id": image_id, "source": pdf_name}
+#                     ))
+#                     embedding_tasks.append(embed_image(pil_image))
+#                 except Exception as e:
+#                     print(f"Error processing image {img_index} on page {i}: {e}")
+
+#         if not all_docs:
+#             raise ValueError("No content found in PDF.")
+
+#         # Execute embeddings in parallel
+#         all_embeddings = await asyncio.gather(*embedding_tasks)
+
+#         # Build HNSW Index
+#         dim = 512 
+#         index = faiss.IndexHNSWFlat(dim, 32)
+#         index.add(np.array(all_embeddings).astype('float32'))
+
+#         # Build Docstore and ID mapping
+#         docstore = InMemoryDocstore({})
+#         index_to_docstore_id = {}
+#         for idx, d in enumerate(all_docs):
+#             uid = str(uuid4())
+#             docstore.add({uid: d})
+#             index_to_docstore_id[idx] = uid
+
+#         vector_store = FAISS(
+#             embedding_function=embed_text,
+#             index=index,
+#             docstore=docstore,
+#             index_to_docstore_id=index_to_docstore_id
+#         )
+     
+#         cache.save_to_cache(cache_key, vector_store, image_data_store)
+#         return vector_store, image_data_store
+#     finally:
+#         doc.close()
 
 
 # import io

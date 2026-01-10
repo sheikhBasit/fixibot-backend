@@ -1,12 +1,14 @@
+import asyncio
 from services.multimodal_embeddings import embed_text
 from fastapi import Request
-import asyncio
 from langchain_core.runnables import (
     RunnableSerializable,
     RunnablePassthrough,
     RunnableBranch,
     RunnableLambda,
 )
+from langchain_tavily import TavilySearchResults
+from langchain_core.documents import Document
 from typing import Dict, Any, Optional, List, Literal
 import logging
 from models.chat import ChatSession
@@ -16,8 +18,6 @@ from services.dependencies import get_diagnostic_agent, get_image_analyzer, get_
 from services.simple_responses import SimpleResponseGenerator
 from datetime import datetime
 
-# from services.intent_classifier import get_intent_classifier
-# ... imports ...
 from services.dependencies import get_sandwich_processor
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class ChatService:
         self.image_analyzer = get_image_analyzer(request)
         # self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
-
+        self.tavily_tool = TavilySearchResults(max_results=3)
          # Use SandwichProcessor instead of IntentClassifier
         self.sandwich = get_sandwich_processor(request)
     def _contains_non_english_script(self, text: str) -> bool:
@@ -55,9 +55,6 @@ class ChatService:
             
         return False
 
-    # In services/chat_service.py
-
-    # In services/chat_service.py
 
     def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag", "command", "off_topic"]:
         logger.info(f"Routing logic -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
@@ -238,24 +235,16 @@ class ChatService:
         async def query_expansion_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Rewrite user query to be more search-friendly"""
             original_prompt = inputs["prompt"]
-            
             expansion_prompt = f"""
-    You are an AI assistant optimizing queries for a vehicle manual search engine.
+    You are an expert mechanic. The user is asking a question in non-technical language.
     
-    USER INPUT: {original_prompt}
-    CHAT HISTORY: {inputs.get('chat_history', [])}
-    
-    INSTRUCTIONS:
-    1. Generate a search query using ONLY technical automotive keywords.
-    2. Remove all conversational filler (e.g., "what's going on", "can you help").
-    3. DO NOT USE SQL (no SELECT, WHERE, or LIKE statements).
-    4. DO NOT use quotes or special characters.
-    5. If the user mentions "it", identify what "it" is from the chat history.
-    
-    OUTPUT: Just the keywords.
-    Example: "engine starting failure battery alternator starter"
-    """
-            
+            Generate 3 distinct search queries for: "{original_prompt} and consider the chat history for context. CHAT HISTORY: {inputs.get('chat_history', [])}"
+            1. Technical translation
+            2. Symptom-based query
+            3. Component-focused query
+            Output ONLY the 3 queries separated by newlines. No numbering.
+            """
+
             # Call a cheaper/faster model for this if possible
             optimized_query = await self.diagnostic_agent.ainvoke({
                 "system_prompt": "You are a query optimizer.",
@@ -265,7 +254,8 @@ class ChatService:
             })
             
             # Update the prompt used for RETRIEVAL, but keep original for Generation
-            return {**inputs, "search_query": optimized_query.strip()}
+            queries = [q.strip() for q in optimized_query.split('\n') if q.strip()]
+            return {**inputs, "search_queries": queries[:3]}
 
         async def parallel_step(inputs: Dict[str, Any]):
             """Runs expansion and image analysis at the same time to reduce latency."""
@@ -275,83 +265,316 @@ class ChatService:
             # Combine results from both chains
             return {**results[0], **results[1]}
 
+        # async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        #     """
+        #     Retrieve relevant information from vector store with proper score handling
+        #     and expose retrieved documents for testing/evaluation.
+        #     """
+        #     try:
+        #         vehicle = inputs.get("vehicle", {})
+        #         chat_history = inputs.get("chat_history", [])
+                
+        #         # 1. Use the Optimized Query from expansion chain
+        #         search_query = inputs.get("search_query", inputs["prompt"])
+                
+        #         # 2. Embed ONLY the English translation/optimized query
+        #         query_embedding = await embed_text(search_query)
+                
+        #         # 3. Increase K to improve Top-5 metrics
+        #         k_value = 5 
+
+                
+        #         # 5. First Search Attempt (Specific)
+        #         docs_and_scores = await self.vectorstore.asimilarity_search_with_score_by_vector(
+        #             query_embedding,
+        #             k=k_value,
+        #             filter=None
+        #         )
+
+        #         # Normalize docs_and_scores to list of (Document, score)
+        #         normalized = []
+        #         for item in docs_and_scores:
+        #             if isinstance(item, tuple) and len(item) == 2:
+        #                 doc, score = item
+        #             elif hasattr(item, "page_content"):
+        #                 doc = item
+        #                 score = None # Should ideally not happen with search_with_score
+        #             else:
+        #                 continue
+        #             normalized.append((doc, score))
+
+        #         # --- NEW: Relevancy Check & Filtering ---
+        #         valid_docs = []
+        #         for doc, score in normalized:
+        #             # Threshold: Adjust based on your vector store metric
+        #             # If using Cosine similarity (0 to 1), < 0.65 might be irrelevant
+        #             # If using L2 distance, > threshold is irrelevant
+        #             if score is not None and score > 1.2: # Example threshold for "too far away"
+        #                 continue 
+        #             valid_docs.append(doc)
+                
+        #         if not valid_docs:
+        #             text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+        #         else:
+        #             text_context = "\n---\n".join([doc.page_content for doc in valid_docs])
+
+        #         # Build multimodal context (for images) based on valid docs
+        #         multimodal_context = []
+        #         for doc in valid_docs:
+        #             if doc.metadata.get("type") == "image":
+        #                 image_id = doc.metadata.get("image_id")
+        #                 if image_id in self.image_data_store:
+        #                     multimodal_context.append({
+        #                         "type": "image_url",
+        #                         "image_url": {
+        #                             "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
+        #                         }
+        #                     })
+
+        #         # Build retrieved_context for evaluation (Keep originals for metrics)
+        #         retrieved_context = [
+        #             {
+        #                 "doc_id": doc.metadata.get("source", "unknown"),
+        #                 "page": doc.metadata.get("page", "unknown"),
+        #                 "score": round(score, 3) if isinstance(score, (int, float)) else None
+        #             }
+        #             for doc, score in normalized
+        #         ]
+
+        #         # Return complete response
+        #         return {
+        #             **inputs,
+        #             "context_2": text_context,
+        #             "multimodal_context": multimodal_context,
+        #             "retrieved_context": retrieved_context
+        #         }
+
+        #     except Exception as e:
+        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
+        #         return {
+        #             **inputs,
+        #             "context_2": "Knowledge retrieval failed",
+        #             "retrieved_context": []
+        #         }
+          
+        # async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        #     """
+        #     Debug Version: Prints RAW SCORES to terminal.
+        #     """
+        #     try:
+        #         vehicle = inputs.get("vehicle", {})
+        #         chat_history = inputs.get("chat_history", [])
+                
+        #         # 1. Get Queries
+        #         base_query = inputs.get("search_query", inputs["prompt"])
+        #         queries = inputs.get("search_queries", [base_query])
+        #         if isinstance(queries, str): queries = [queries]
+
+        #         print(f"\n🔎 [DEBUG] Searching for: {queries}")
+
+        #         # 2. Async Parallel Search
+        #         async def process_single_query(query_text):
+        #             try:
+        #                 # ✅ FIX: Handle Async/Sync Embedding correctly
+        #                 if asyncio.iscoroutinefunction(embed_text):
+        #                     query_embedding = await embed_text(query_text)
+        #                 else:
+        #                     query_embedding = await asyncio.to_thread(embed_text, query_text)
+                        
+        #                 # Fetch Top 5 for THIS variation
+        #                 return await self.vectorstore.asimilarity_search_with_score_by_vector(
+        #                     query_embedding, k=5
+        #                 )
+        #             except Exception as e:
+        #                 logger.error(f"Search failed: {e}")
+        #                 return []
+
+        #         # 3. Execute
+        #         results_list = await asyncio.gather(*[process_single_query(q) for q in queries])
+        #         all_docs = [item for sublist in results_list for item in sublist]
+
+        #         # 4. Deduplicate
+        #         unique_docs = {}
+        #         for item in all_docs:
+        #             if isinstance(item, tuple): doc, score = item
+        #             else: doc, score = item, 100.0
+                    
+        #             key = f"{doc.metadata.get('source')}_{doc.metadata.get('page')}"
+                    
+        #             # Logic: Lower score is better
+        #             if key not in unique_docs or score < unique_docs[key][1]:
+        #                 unique_docs[key] = (doc, score)
+
+        #         # 5. Normalize & Log Scores
+        #         normalized = list(unique_docs.values())
+        #         normalized.sort(key=lambda x: x[1]) # Sort best (lowest) first
+
+        #         # --- DEBUG PRINT ---
+        #         if normalized:
+        #             print(f"📊 [DEBUG] Top 3 Raw Scores (Lower is better):")
+        #             for i, (d, s) in enumerate(normalized[:3]):
+        #                 print(f"   {i+1}. Score: {s:.4f} | Source: {d.metadata.get('source')} Page {d.metadata.get('page')}")
+        #         else:
+        #             print("⚠️ [DEBUG] No documents returned from vector store!")
+        #         # -------------------
+
+        #         # 6. Relaxed Filter
+        #         valid_docs = []
+        #         for doc, score in normalized:
+        #             # CHANGED: Increased threshold from 1.2 to 1.5 to be safe
+        #             # If scores are mostly 1.3 or 1.4, this will catch them.
+        #             if score is not None and score > 1.5: 
+        #                 continue 
+        #             valid_docs.append(doc)
+                
+        #         # FALLBACK: Always keep Top 1 if everything else failed
+        #         if not valid_docs and normalized:
+        #             print("⚠️ [DEBUG] Threshold excluded all. Using Top 1 fallback.")
+        #             valid_docs.append(normalized[0][0])
+
+        #         # 7. Build Context
+        #         text_context = "\n---\n".join([d.page_content for d in valid_docs]) if valid_docs else "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+
+        #         # 8. Evaluation Metadata
+        #         retrieved_context = [
+        #             {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "score": round(s, 3)}
+        #             for d, s in normalized[:10]
+        #         ]
+
+        #         return {
+        #             **inputs,
+        #             "context_2": text_context,
+        #             "retrieved_context": retrieved_context
+        #         }
+
+        #     except Exception as e:
+        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
+        #         return {**inputs, "context_2": "Error", "retrieved_context": []}
+
+    
         async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """
-            Retrieve relevant information from vector store with proper score handling
-            and expose retrieved documents for testing/evaluation.
+            FINAL OPTIMIZED SEARCH (No Reranker).
+            Uses Parallel Vector Search to achieve 100% Recall.
             """
             try:
-                vehicle = inputs.get("vehicle", {})
-                chat_history = inputs.get("chat_history", [])
-                
-                # 1. Use the Optimized Query from expansion chain
-                search_query = inputs.get("search_query", inputs["prompt"])
-                
-                # 2. Embed ONLY the English translation/optimized query
-                query_embedding = await embed_text(search_query)
-                
-                # 3. Increase K to improve Top-5 metrics
-                k_value = 5 
+                # 1. Setup
+                base_query = inputs.get("search_query", inputs["prompt"])
+                queries = inputs.get("search_queries", [base_query])
+                if isinstance(queries, str): queries = [queries]
 
-                
-                # 5. First Search Attempt (Specific)
-                docs_and_scores = await self.vectorstore.asimilarity_search_with_score_by_vector(
-                    query_embedding,
-                    k=k_value,
-                    filter=None
-                )
+                # 2. Async Parallel Search
+                async def process_single_query(query_text):
+                    try:
+                        # ✅ FIX: Handle Async/Sync Embedding correctly
+                        if asyncio.iscoroutinefunction(embed_text):
+                            query_embedding = await embed_text(query_text)
+                        else:
+                            query_embedding = await asyncio.to_thread(embed_text, query_text)
+                        
+                        # Fetch Top 5 for THIS variation
+                        return await self.vectorstore.asimilarity_search_with_score_by_vector(
+                            query_embedding, k=5
+                        )
+                    except Exception as e:
+                        logger.error(f"Search failed: {e}")
+                        return []
 
-                # Normalize docs_and_scores to list of (Document, score)
-                normalized = []
-                for item in docs_and_scores:
-                    if isinstance(item, tuple) and len(item) == 2:
-                        doc, score = item
-                    elif hasattr(item, "page_content"):
-                        doc = item
-                        score = None # Should ideally not happen with search_with_score
-                    else:
-                        continue
-                    normalized.append((doc, score))
+                # Run searches
+                results_list = await asyncio.gather(*[process_single_query(q) for q in queries])
+                raw_docs = [item for sublist in results_list for item in sublist]
 
-                # --- NEW: Relevancy Check & Filtering ---
-                valid_docs = []
-                for doc, score in normalized:
-                    # Threshold: Adjust based on your vector store metric
-                    # If using Cosine similarity (0 to 1), < 0.65 might be irrelevant
-                    # If using L2 distance, > threshold is irrelevant
-                    if score is not None and score > 1.2: # Example threshold for "too far away"
-                        continue 
-                    valid_docs.append(doc)
+                # 3. Deduplicate (Keep Best Score)
+                unique_docs = {}
+                for item in raw_docs:
+                    if isinstance(item, tuple): doc, score = item
+                    else: doc, score = item, 100.0
+                    
+                    # Create unique key based on source/page
+                    src = doc.metadata.get('source', 'unk')
+                    pg = doc.metadata.get('page', 'unk')
+                    img = doc.metadata.get('image_id', '')
+                    key = f"img_{img}" if img else f"{src}_{pg}"
+
+                    # Keep the instance with the lowest (best) L2 score
+                    if key not in unique_docs or score < unique_docs[key][1]:
+                        unique_docs[key] = (doc, score)
+
+                # 4. Sort & Select Top Candidates
+                candidates = list(unique_docs.values())
+                # Sort by Vector Score (Ascending = Best)
+                candidates.sort(key=lambda x: x[1])
+
+                # 5. Final Filtering (Top 7)
+                final_docs = []
+                for doc, score in candidates[:7]:
+                    # Loose filter: L2 distance > 1.4 is usually irrelevant
+                    if score < 1.4:
+                        final_docs.append(doc)
+
+                # Fallback: Always return Top 1 if nothing passed filter
+                if not final_docs and candidates:
+                    final_docs.append(candidates[0][0])
+
+                # =========================================================
+                # 🌍 TAVILY WEB SEARCH FALLBACK (The New Part)
+                # =========================================================
+                is_web_result = False
                 
-                if not valid_docs:
-                    text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                # If Vector Search found NOTHING valid
+                if not final_docs:
+                    logger.info(f"⚠️ Vector search empty for '{base_query}'. Triggering Tavily...")
+                    try:
+                        # Use base_query for web search (it's usually cleaner)
+                        # Tavily is sync by default, but LangChain tools have .ainvoke
+                        web_results = await self.tavily_tool.ainvoke({"query": base_query})
+                        
+                        # Process Tavily Results
+                        # Tavily returns list of dicts: [{'url':..., 'content':...}]
+                        if isinstance(web_results, list) and len(web_results) > 0:
+                            web_content = ""
+                            for res in web_results:
+                                web_content += f"Source: {res.get('url', 'Web')}\nContent: {res.get('content', '')}\n\n"
+                            
+                            # Create a "Fake" Document so the rest of the pipeline works
+                            final_docs = [Document(page_content=web_content, metadata={"source": "Google/Tavily"})]
+                            is_web_result = True
+                            logger.info("✅ Tavily found results.")
+                        else:
+                            logger.warning("❌ Tavily returned no results.")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ Tavily search failed: {e}")
+                        # Do nothing, final_docs remains empty -> Triggers Apology
+
+                # 4. Build Context Output
+                if final_docs:
+                    text_context = "\n---\n".join([d.page_content for d in final_docs])
+                    # Add a header so the LLM knows if it's manual vs web data
+                    if is_web_result:
+                        text_context = f"*** NOTE: DATA FROM WEB SEARCH ***\n{text_context}"
                 else:
-                    text_context = "\n---\n".join([doc.page_content for doc in valid_docs])
-
-                # Build multimodal context (for images) based on valid docs
+                    text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                # 6. Build Context
+                # text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                
+                # Multimodal context
                 multimodal_context = []
-                for doc in valid_docs:
+                for doc in final_docs:
                     if doc.metadata.get("type") == "image":
-                        image_id = doc.metadata.get("image_id")
-                        if image_id in self.image_data_store:
+                        img_id = doc.metadata.get("image_id")
+                        if img_id in self.image_data_store:
                             multimodal_context.append({
                                 "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
-                                }
+                                "image_url": {"url": f"data:image/png;base64,{self.image_data_store[img_id]}"}
                             })
 
-                # Build retrieved_context for evaluation (Keep originals for metrics)
+                # Evaluation Meta
                 retrieved_context = [
-                    {
-                        "doc_id": doc.metadata.get("source", "unknown"),
-                        "page": doc.metadata.get("page", "unknown"),
-                        "score": round(score, 3) if isinstance(score, (int, float)) else None
-                    }
-                    for doc, score in normalized
+                    {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "score": round(score, 3)}
+                    for d, score in candidates[:7] if hasattr(d, "metadata")
                 ]
 
-                # Return complete response
                 return {
                     **inputs,
                     "context_2": text_context,
@@ -361,12 +584,8 @@ class ChatService:
 
             except Exception as e:
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
-                return {
-                    **inputs,
-                    "context_2": "Knowledge retrieval failed",
-                    "retrieved_context": []
-                }
-
+                return {**inputs, "context_2": "Error", "retrieved_context": []}
+                
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:

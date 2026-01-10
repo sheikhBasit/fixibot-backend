@@ -1,0 +1,11 @@
+id,recall,mrr,rank,gt_page,found_pages
+car_click_no_start,1,1.0,1,97,"[97, 81, 83, 81, 96]"
+car_overheat_highway,1,1.0,1,81,"[81, 131, 74, 91, 41]"
+brake_wobble,1,1.0,1,88,"[88, 98, 25, 7, 31]"
+wrong_fuel_diesel,1,1.0,1,1,"[1, 81, 46, 54, 41]"
+flat_tire_symptoms,1,1.0,1,83,"[83, 83, 46, 96, 86]"
+steering_hard,1,1.0,1,31,"[31, 87, 41, 1, 81]"
+dim_lights,1,1.0,1,72,"[72, 108, 1, 72, 96]"
+bike_start_battery_ok,1,1.0,1,54,"[54, 47, 58, 49, 64]"
+scooter_jerk,1,1.0,1,58,"[58, 48, 49, 83, 139]"
+bike_shutoff_riding,1,1.0,1,58,"[58, 51, 58, 59, 54]"

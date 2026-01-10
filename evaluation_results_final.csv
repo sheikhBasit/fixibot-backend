@@ -1,0 +1,11 @@
+query,latency,retrieval_precision,retrieval_recall,retrieval_f1,retrieval_mrr,bleu_score,rouge_l,bert_precision,bert_recall,bert_f1
+Guys my car wont start today. It just makes this rapid clicking noise when I turn the key. Lights work fine. Is it the starter?,12.893,0.0,0.0,0.0,0.0,0.019,0.14,0.856,0.864,0.86
+Help! Engine temp gauge shot up to red while driving on the highway. I pulled over. What do I do now?,0.942,0.143,1.0,0.25,0.333,0.01,0.13,0.856,0.877,0.866
+Why does my steering wheel shake like crazy when I brake at high speeds? Its really scary.,1.599,0.167,1.0,0.286,0.25,0.001,0.03,0.793,0.871,0.831
+URGENT: I accidentally filled my diesel car with petrol. I havent started it yet. What happens if I drive it?,1.569,0.143,1.0,0.25,0.5,0.053,0.149,0.835,0.936,0.883
+"Car feels weird, like its pulling to the left and making a thudding noise. Is this a flat?",0.894,0.143,1.0,0.25,0.333,0.029,0.231,0.844,0.855,0.85
+Steering wheel has become super heavy and hard to turn fast. Power steering pump issue?,0.9,0.0,0.0,0.0,0.0,0.044,0.211,0.851,0.887,0.869
+My headlights are super dim at night. I already changed the bulbs but no difference.,0.824,0.143,1.0,0.25,1.0,0.011,0.108,0.855,0.852,0.853
+My motorcycle cranks but wont fire up. Battery is brand new. What else could it be?,0.798,0.143,1.0,0.25,0.143,0.016,0.35,0.854,0.919,0.885
+My scooter jerks and hesitates when I try to accelerate from a stop. CVT belt?,0.772,0.143,1.0,0.25,0.333,0.016,0.15,0.848,0.872,0.859
+Riding my heavy bike and it just cut out completely on the highway. Scary. Engine shut off.,1.3,0.143,1.0,0.25,0.2,0.002,0.04,0.802,0.866,0.833

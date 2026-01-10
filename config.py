@@ -2,13 +2,6 @@ from pydantic_settings import BaseSettings
 from pydantic import AnyUrl
 from typing import List
 
-# class ClipEmbeddings:
-#     def embed_documents(self, texts):
-#         return [embed_text(text) for text in texts]
-    
-#     def embed_query(self, text):
-#         return embed_text(text)
-
 class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"
@@ -37,6 +30,7 @@ class Settings(BaseSettings):
     HUGGINGFACEHUB_API_TOKEN: str
     GROQ_API_KEY: str
     OPENAI_API_KEY: str
+    TAVILY_API_KEY: str
     HF_TOKEN: str
     USE_ML_VALIDATION: bool = True
     # EMBEDDING_MODEL = ClipEmbeddings()

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build: .
+    container_name: fastapi_mechanic_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - vector_cache:/app/.vector_cache
+      - upload_data:/app/data/uploads
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017/mechanic_db
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+    depends_on:
+      - mongodb
+    restart: always
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:latest
+    container_name: mechanic_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+volumes:
+  mongo_data:
+  vector_cache:
+  upload_data:

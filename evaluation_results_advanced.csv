@@ -1,0 +1,35 @@
+query,latency,retrieval_precision,retrieval_recall,retrieval_f1,retrieval_mrr,bleu_score,rouge_l,bert_precision,bert_recall,bert_f1,generated_answer
+Guys my car wont start today. It just makes this rapid clicking noise when I turn the key. Lights work fine. Is it the starter?,15.368,0.0,0.0,0.0,0.0,0.018,0.091,0.855,0.864,0.86,"Step 1: Check battery voltage.
+Step 2: Inspect starter motor and solenoid.
+Step 3: Consult a mechanic for starter replacement."
+Help! Engine temp gauge shot up to red while driving on the highway. I pulled over. What do I do now?,0.912,0.0,0.0,0.0,0.0,0.122,0.255,0.856,0.902,0.878,"Step 1: Turn off the engine immediately.
+Step 2: Let it cool for 30-45 minutes, then check coolant level.
+Step 3: If low, refill coolant and inspect for leaks or faulty radiator fan."
+Why does my steering wheel shake like crazy when I brake at high speeds? Its really scary.,2.063,0.0,0.0,0.0,0.0,0.001,0.027,0.784,0.871,0.825,"Step 1: 
+- Check the brake rotors for excessive wear or warping, as this can cause the steering wheel to shake when braking at high speeds. Inspect the rotors for any signs of damage, such as scoring or excessive thickness variation. If the rotors are damaged, they may need to be resurfaced or replaced. The cost of replacing brake rotors can range from $200 to $500 per axle, depending on the vehicle and the quality of the replacement rotors.
+
+Step 2: 
+- Inspect the brake pads for wear or uneven wear patterns, as this can also contribute to the shaking sensation. Check the brake pad thickness and look for any signs of uneven wear, such as uneven friction material wear or excessive wear on one side of the pad. If the brake pads are worn or unevenly worn, they may need to be replaced. The cost of replacing brake pads can range from $50 to $200 per axle, depending on the vehicle and the quality of the replacement pads.
+
+Step 3: 
+- If the issue persists after checking the brake rotors and pads, it may be necessary to inspect the vehicle's suspension and steering system for any loose or worn-out components. This can include checking the tie rod ends, ball joints, and control arm bushings for any signs of wear or looseness. If any of these components are found to be loose or worn out, they may need to be replaced. It is recommended to consult a professional mechanic for this inspection, as it requires specialized tools and expertise. The cost of replacing suspension and steering components can range from $200 to $1,000 or more, depending on the vehicle and the extent of the repairs."
+URGENT: I accidentally filled my diesel car with petrol. I havent started it yet. What happens if I drive it?,1.805,0.1,1.0,0.182,0.143,0.048,0.128,0.827,0.927,0.875,"Step 1: 
+- Do not start the engine. Petrol in a diesel engine can cause severe damage, including fuel system corrosion, engine oil dilution, and potentially catastrophic engine failure. The first step is to avoid turning the key or pressing the ignition button to prevent any fuel from circulating through the system.
+
+Step 2: 
+- Have the vehicle towed to a repair shop or a safe location where the fuel can be drained and the system flushed. It's crucial to avoid driving the vehicle even a short distance, as this can introduce petrol into the diesel engine's fuel system, potentially causing irreparable damage. The cost of towing and the subsequent repair may seem significant, but it's far less than the cost of replacing a damaged engine.
+
+Step 3: 
+- Consult a professional mechanic as soon as possible. They will need to drain the petrol from the fuel tank, flush the fuel system, and possibly replace the fuel filters and other components that may have come into contact with the incorrect fuel. The mechanic can assess the situation and provide a detailed estimate of the repairs needed, including the cost of parts and labor. Given the potential for significant damage, it's essential to prioritize professional assistance to ensure the vehicle is properly repaired and safe to drive."
+"Car feels weird, like its pulling to the left and making a thudding noise. Is this a flat?",0.92,0.0,0.0,0.0,0.0,0.009,0.14,0.842,0.837,0.84,"Step 1: Check tire pressure on all four tires.
+Step 2: Inspect tire tread for uneven wear.
+Step 3: Visit a workshop to inspect wheel alignment and suspension."
+Steering wheel has become super heavy and hard to turn fast. Power steering pump issue?,0.993,0.0,0.0,0.0,0.0,0.041,0.25,0.85,0.88,0.864,"Step 1: Check power steering fluid level.
+Step 2: Inspect power steering belt for wear or damage.
+Step 3: Test power steering pump for proper function."
+My headlights are super dim at night. I already changed the bulbs but no difference.,1.206,0.1,1.0,0.182,0.143,0.012,0.162,0.857,0.863,0.86,"Step 1: Check battery voltage.
+Step 2: Inspect wiring and connections for corrosion.
+Step 3: Test alternator output for proper charging."
+My motorcycle cranks but wont fire up. Battery is brand new. What else could it be?,0.745,0.143,1.0,0.25,1.0,0.0,0.0,0.792,0.853,0.821,I'm having trouble processing your request. Please try again.
+My scooter jerks and hesitates when I try to accelerate from a stop. CVT belt?,0.529,0.0,0.0,0.0,0.0,0.0,0.0,0.797,0.818,0.807,I'm having trouble processing your request. Please try again.
+Riding my heavy bike and it just cut out completely on the highway. Scary. Engine shut off.,0.549,0.1,1.0,0.182,0.2,0.0,0.0,0.794,0.825,0.809,I'm having trouble processing your request. Please try again.
