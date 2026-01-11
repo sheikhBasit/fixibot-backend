@@ -147,7 +147,6 @@ async def start_chat_session(user: dict = Depends(get_current_user)):
 #         raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
 
 @router.post("/message")
-@limiter.limit("5/minute") 
 async def process_message(
     request: Request,
     session_id: Optional[str] = Form(None),
