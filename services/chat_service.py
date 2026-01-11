@@ -60,63 +60,81 @@ class ChatService:
             
         return False
 
-    def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag", "command", "off_topic"]:
-        logger.info(f"Routing logic -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
+    def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag_static", "rag_dynamic", "command", "off_topic"]:
+        logger.info(f"Expert Router -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
 
-        # 1. FORCE RAG for Images
-        if has_image:
-            return "rag"
-
-        # 2. Check for Off-topic
+        # 1. INITIAL GUARDRAILS (Highest Priority)
         if self._is_off_topic_or_inappropriate(user_input):
             return "off_topic"
 
-        # --- 3. ENLARGED TECHNICAL INDICATORS ---
-        # Focus on symptoms, specific vehicle parts, and mechanical issues
+        clean_input = user_input.lower()
+
+        # 2. IMAGE LOGIC (Prioritize text if provided with image)
+        if has_image:
+            # If user provided an image AND text, we check the text to see if it's a dynamic question
+            # Example: User uploads a photo of a dent and asks "How much to fix this?"
+            dynamic_indicators = [
+                "price", "cost", "recall", "software", "update", "latest", 
+                "dent", "scratch", "paint", "worth", "camera issue", "2025", "2026"
+            ]
+            if any(word in clean_input for word in dynamic_indicators):
+                logger.info("📸 Image + Dynamic Text detected. Routing to Web Search.")
+                return "rag_dynamic"
+            
+            # If it's just an image or image + "What is this?", we use static RAG for diagnosis
+            logger.info("📸 Image detected. Routing to Static RAG for Visual Diagnosis.")
+            return "rag_static"
+
+        # --- 3. TECHNICAL EXPERT ROUTER ---
         technical_indicators = [
-            # General Subject Matter (The "Vehicle" Keywords)
-            "car", "bike", "vehicle", "scooter", "motorcycle", "bike", "auto", "automobile",
-            # Symptoms
+            "car", "bike", "vehicle", "scooter", "motorcycle", "auto", "automobile",
             "shake", "shaking", "vibrate", "vibration", "noise", "sound", "clicking", 
             "smoke", "smell", "leak", "leaking", "hot", "overheat", "dim", "heavy",
             "stuck", "jerking", "hesitating", "pulling", "wobble", "shudder",
-            
-            # Action/State
             "start", "fire", "crank", "ignition", "broke", "fix", "repair", "issue", 
             "problem", "error", "check", "light", "warning", "code", "p0", "service",
-            
-            # Components (Specific enough to trigger RAG)
             "engine", "battery", "tire", "brake", "steering", "gear", "clutch", "fuel",
             "coolant", "radiator", "plug", "headlight", "suspension", "exhaust"
         ]
-        
-        # Check for technical content FIRST
-        clean_input = user_input.lower()
-        if any(indicator in clean_input for indicator in technical_indicators):
-            return "rag"
+
+        # Check if the user is asking a technical/vehicle question
+        if intent == "technical_question" or any(ind in clean_input for ind in technical_indicators):
+            
+            # Category A: Dynamic Technical (Bypass Manual)
+            # These are issues manuals CANNOT answer (Live prices, software bugs, bodywork)
+            dynamic_indicators = [
+                "price", "cost", "recall", "software", "update", "latest", 
+                "dent", "scratch", "paint", "rust", "detailing", "near me", "worth",
+                "camera issue", "infotainment", "glitch", "connectivity", "2025", "2026"
+            ]
+            
+            if any(word in clean_input for word in dynamic_indicators):
+                logger.info("🌐 Dynamic Technical Query detected. Routing to Web Search.")
+                return "rag_dynamic"
+            
+            # Category B: Static Technical (Manual First)
+            # These are mechanical repairs found in your PDF
+            logger.info("📖 Static Technical Query detected. Routing to Manual RAG.")
+            return "rag_static"
 
         # --- 4. CONTEXT MODIFICATIONS ---
-        modification_keywords = [
-            "shorter", "brief", "too long", "summarize", "detail", "explain", 
-            "elaborate", "again", "repeat", "what?", "didn't understand", "simplify"
-        ]
+        modification_keywords = ["shorter", "brief", "summarize", "detail", "explain", "repeat", "simplify"]
         if any(word in clean_input for word in modification_keywords):
-            return "rag"
+            return "rag_static"
 
-        # --- 5. CONVERSATIONAL INTENTS ---
-        # Now it only goes here if no technical indicators were found
-        if intent in ["greeting", "small_talk", "other"]:
-            return "simple"
-
-        # --- 6. COMMANDS ---
+        # --- 5. COMMANDS ---
         if intent == "command":
             command_keywords = ["turn", "switch", "open", "close", "start", "stop", "activate"]
             if any(word in clean_input for word in command_keywords):
                 return "command"
-            return "rag"
+            return "rag_static"
 
-        return "rag"
-    
+        # --- 6. CONVERSATIONAL/SMALL TALK ---
+        if intent in ["greeting", "small_talk", "other"]:
+            return "simple"
+
+        # Default Fallback
+        return "rag_static"
     
     def _create_simple_response_chain(self) -> RunnableSerializable:
         """Chain for simple responses (greetings, small talk)"""
@@ -208,13 +226,6 @@ class ChatService:
             english_text = user_input_data["english_translation"]
             intent = user_input_data["intent"]
 
-            chain_inputs = {
-                "prompt": english_text,
-                "image_url": image_url,
-                "vehicle": vehicle.model_dump() if vehicle else {},
-                "chat_history": session.chat_history,
-                "intent": intent
-            }
 
             processing_path = self._determine_processing_path(intent, english_text, bool(image_url))
             
@@ -225,6 +236,14 @@ class ChatService:
             else:
                 chain = self._create_rag_chain()
 
+            chain_inputs = {
+                "prompt": english_text,
+                "image_url": image_url,
+                "vehicle": vehicle.model_dump() if vehicle else {},
+                "chat_history": session.chat_history,
+                "intent": intent,
+                "processing_path": processing_path # <--- ADD THIS LINE
+            }
             # 🔥 Use astream() to yield chunks to the FastAPI route
             async for chunk in chain.astream(chain_inputs):
                 if isinstance(chunk, dict) and "diagnosis_output" in chunk:
@@ -478,162 +497,104 @@ class ChatService:
         #         logger.error(f"Retrieval failed: {e}", exc_info=True)
         #         return {**inputs, "context_2": "Error", "retrieved_context": []}
 
+       
         async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-
             try:
-
                 original_prompt = inputs.get("prompt", "")
-
+                # Get the path decided by _determine_processing_path
+                path = inputs.get("processing_path", "rag_static")
                 expansion_results = inputs.get("search_queries", [])
-
                 search_list = [original_prompt] + expansion_results
 
-
-                # --- STEP 1: WEAK KNOWLEDGE GATE (Trigger Web Early) ---
-
-                # Keywords that we KNOW are not in mechanical manuals
-
-                web_priority_indicators = [
-
-                    "price", "cost", "recall", "tsb", "software", "update", "app",
-
-                    "dent", "scratch", "paint", "rust", "detailing", "near me", "worth",
-
-                    "camera issue", "infotainment", "glitch", "connectivity"
-
-                ]
-
-                
-
-                clean_prompt = original_prompt.lower()
-
-                # If these words exist, we force the local search to 'fail' to trigger Tavily
-
-                force_web = any(word in clean_prompt for word in web_priority_indicators)
-
-
                 final_docs = []
-
                 sorted_candidates = []
-
                 is_web_result = False
 
+                # --- PATH A: EXPERT DYNAMIC ROUTE (Direct to Web) ---
+                if path == "rag_dynamic":
+                    logger.info("🌐 Expert Router: Dynamic Path. Skipping Manual for Tavily...")
+                    web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
+                    
+                    if web_results:
+                        # 1. Handle Case where Tavily returns a simple string
+                        if isinstance(web_results, str):
+                            web_content = web_results
+                        
+                        # 2. Handle Case where Tavily returns a list (the intended way)
+                        elif isinstance(web_results, list):
+                            processed_results = []
+                            for res in web_results:
+                                if isinstance(res, dict):
+                                    source = res.get('url', 'Unknown Source')
+                                    content = res.get('content', str(res))
+                                    processed_results.append(f"Source: {source}\n{content}")
+                                else:
+                                    # Fallback if the list contains strings instead of dicts
+                                    processed_results.append(str(res))
+                            web_content = "\n---\n".join(processed_results)
+                        
+                        # 3. Fallback for any other type
+                        else:
+                            web_content = str(web_results)
 
-                if not force_web:
-
-                    # --- STEP 2: LOCAL VECTOR SEARCH ---
-
+                        final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
+                        is_web_result = True
+                # --- PATH B: EXPERT STATIC ROUTE (Manual Search) ---
+                else:
                     async def process_single_query(q_text):
-
                         emb = await embed_text(q_text) if asyncio.iscoroutinefunction(embed_text) else await asyncio.to_thread(embed_text, q_text)
-
                         return await self.vectorstore.asimilarity_search_with_score_by_vector(emb, k=5)
-
 
                     results_list = await asyncio.gather(*[process_single_query(q) for q in search_list])
 
-
-                    # --- STEP 3: RRF FUSION & THRESHOLD ---
-
                     rrf_scores = {}
-
                     k = 60
-
-                    threshold = 1.3 # Lowered to ensure high-quality local matches only
-
+                    threshold = 1.3 
                     
-
                     for search_results in results_list:
-
                         for rank, (doc, l2_score) in enumerate(search_results, 1):
-
                             if l2_score > threshold: continue 
-
                             key = f"{doc.metadata.get('source', 'unk')}_{doc.metadata.get('page', 'unk')}"
-
                             if key not in rrf_scores: rrf_scores[key] = [doc, 0.0]
-
                             rrf_scores[key][1] += 1.0 / (k + rank)
 
-
                     sorted_candidates = sorted(rrf_scores.values(), key=lambda x: x[1], reverse=True)
-
                     final_docs = [item[0] for item in sorted_candidates[:5]]
 
-                else:
+                    # SAFETY FALLBACK: If Static path fails to find manual data, try Web
+                    if not final_docs:
+                        vehicle_anchors = ["car", "bike", "vehicle", "engine", "brake", "battery", "tesla"]
+                        if any(w in original_prompt.lower() for w in vehicle_anchors):
+                            logger.info("⚠️ Static Search failed. Trying Web Fallback...")
+                            web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
+                            if web_results:
+                                web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
+                                final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
+                                is_web_result = True
+                        else:
+                            return {**inputs, "context_2": "NO_RELEVANT_TECHNICAL_DATA_FOUND", "retrieved_context": []}
 
-                    logger.info("⚡ High-probability web query detected. Skipping manual to avoid noise.")
-
-
-                # --- STEP 4: DECISION LOGIC (Web Fallback vs. Refusal) ---
-
-                if not final_docs:
-
-                    # Security Check: Is this a vehicle query that isn't in our manuals?
-
-                    vehicle_anchors = ["car", "bike", "vehicle", "scooter", "motorcycle", "engine", "brake", "transmission", "battery", "tesla"]
-
-                    is_vehicle_related = any(w in clean_prompt for w in vehicle_anchors)
-
-
-                    if is_vehicle_related:
-
-                        logger.info("⚠️ Vehicle query not in manual/Gate triggered. Using Tavily Fallback...")
-
-                        web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
-
-                        if web_results:
-
-                            web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
-
-                            final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
-
-                            is_web_result = True
-
-                    else:
-
-                        # Refusal: No vehicle context found in prompt
-
-                        logger.warning(f"Refusing query (Out of Scope): {original_prompt}")
-
-                        return {**inputs, "context_2": "NO_RELEVANT_TECHNICAL_DATA_FOUND", "retrieved_context": []}
-
-
-                # --- STEP 5: FINAL CONTEXT BUILD ---
-
+                # --- STEP 5: CONTEXT ASSEMBLY ---
                 text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_DATA"
-
                 if is_web_result: 
-
                     text_context = f"*** WEB DATA ***\n{text_context}"
 
-
-                # Metadata for evaluation/logs
-
                 retrieved_context = [
-
                     {"doc_id": d.metadata.get("source"), "rrf_score": round(score, 4)}
-
                     for d, score in sorted_candidates[:5]
-
                 ]
-
 
                 return {**inputs, "context_2": text_context, "retrieved_context": retrieved_context}
 
-
             except Exception as e:
-
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
-
                 return {**inputs, "context_2": "Error", "retrieved_context": []}
+       
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """Generate diagnostic response using the LLM"""
+            """Generate diagnostic response using the LLM with Expert System Fallbacks"""
             try:
-                # --- NEW: Hallucination Guardrail Check ---
-                if "NO_RELEVANT_TECHNICAL_DATA_FOUND" in inputs.get('context_2', ''):
-                    return {**inputs, "diagnosis_output": "I apologize, but I don't have specific technical information in my database regarding this issue. I recommend consulting a professional mechanic."}
-
+                # 1. Prepare Vehicle Info & Context
+                context_data = inputs.get('context_2', '')
                 vehicle = inputs.get("vehicle", {})
                 vehicle_info = {
                     "make": vehicle.get("brand", "Unknown"),
@@ -642,138 +603,119 @@ class ChatService:
                     "fuel_type": vehicle.get("fuel_type", "Unknown"),
                     "engine_type": vehicle.get("engine_type", "Unknown")
                 }
-                user_prompt = inputs['prompt']
                 
                 # Convert ChatMessage objects to dict for the LLM
                 chat_history_dicts = []
                 for msg in inputs.get("chat_history", []):
                     if hasattr(msg, 'model_dump'):
                         chat_history_dicts.append(msg.model_dump())
-                    else:
+                    elif isinstance(msg, dict):
                         chat_history_dicts.append(msg)
+                    else:
+                        chat_history_dicts.append({"role": "user", "content": str(msg)})
+
+                user_prompt = inputs['prompt']
                 user_prompt_lower = user_prompt.lower()
 
-                # Keywords likely to appear in translations for "Short/Concise"
-                concise_keywords = [
-                    "short", "brief", "summar", "quick", "concise", "simple", 
-                    "fast", "point", "few words", "nutshell", "small", "precis",
-                    "less", "little"
-                ]
+                # 2. Check for "No Data" signal (Expert Fallback Logic)
+                is_fallback = "NO_DATA" in context_data or "NO_RELEVANT_TECHNICAL_DATA_FOUND" in context_data
 
-                # Keywords likely to appear in translations for "Detailed/Long"
-                detailed_keywords = [
-                    "detail", "explain", "elaborate", "why", "more info", 
-                    "long", "comprehens", "full", "complete", "depth", 
-                    "clarify", "description", "whole", "all"
-                ]
-                exact_keywords = ["exact", "verbatim", "copy", "quote", "say exactly", "repeat", "only say"]
-                # Check for Detail first
-                is_detailed_request = any(w in user_prompt_lower for w in detailed_keywords)
-                # Check for Concise specifically (to override defaults if needed)
-                is_concise_request = any(w in user_prompt_lower for w in concise_keywords)
-                is_exact = any(w in user_prompt_lower for w in exact_keywords)
-                if is_exact:
-                    # OPTION A: User wants exact/custom format -> NO SYSTEM OVERRIDE
-                    format_instructions = """
-                    STYLE: **OBEY USER INSTRUCTIONS**.
-                    - The user has requested a specific format (e.g., exact words).
-                    - Ignore standard style templates.
-                    - Follow the User Query instructions precisely.
+                if is_fallback:
+                    # --- Tier 3: Safe Refusal & General Advice ---
+                    system_prompt = f"""
+                    You are a professional automotive technician. 
+                    CRITICAL: I do not have specific repair data for this exact issue in my database or the web.
+                    
+                    Instructions:
+                    1. Apologize professionally for not having the specific technical steps for this {vehicle_info['make']} {vehicle_info['model']}.
+                    2. Provide 3 universal safety/basic checks:
+                    - Check battery terminal connections and voltage.
+                    - Inspect for any visible fluid leaks or loose wiring.
+                    - Check the relevant fuses in the engine bay fuse box.
+                    3. Strictly advise the user to visit a certified mechanic or service center.
+                    4. Do NOT hallucinate specific torque specs or wiring colors.
+                    5. OUTPUT MUST BE IN ENGLISH ONLY.
                     """
-                elif is_detailed_request:
-                    # OPTION A: Detailed (Only if asked)
-                    format_instructions = """
-                    STYLE: **DETAILED AND EDUCATIONAL**. 
-                    - Provide Step-by-Step instructions.
-                    - Explain 'Why' this issue is happening.
-                    - Include potential costs or tools needed.
-                    - Be thorough.
-                    """
+                    user_input_content = f"I couldn't find specific technical data for: {user_prompt}. Give me general safety advice."
+                
                 else:
-                    # OPTION B: Concise Steps (THE DEFAULT)
-                    format_instructions = """
-                    STYLE: **CONCISE AND SURGICAL**.
-                    - Use the 'Step 1, Step 2' format.
-                    - **Maximum 15 words per step.**
-                    - Direct actions only (e.g., "Check battery voltage," not "You should go ahead and check...").
-                    - NO introductory text (No "Here is what to do...").
-                    - NO concluding text (No "Hope this helps").
-                    - If Step 1 fixes it, stop there.
+                    # --- Tier 1 & 2: Standard Technical Diagnostic Mode ---
+                    
+                    # Determine Format Instructions based on user style
+                    concise_keywords = ["short", "brief", "summar", "quick", "concise", "simple", "few words"]
+                    detailed_keywords = ["detail", "explain", "elaborate", "why", "more info", "depth"]
+                    exact_keywords = ["exact", "verbatim", "copy", "quote", "repeat"]
+
+                    is_detailed = any(w in user_prompt_lower for w in detailed_keywords)
+                    is_exact = any(w in user_prompt_lower for w in exact_keywords)
+                    
+                    if is_exact:
+                        format_instructions = "STYLE: **OBEY USER INSTRUCTIONS**. Follow the User Query format precisely."
+                    elif is_detailed:
+                        format_instructions = """
+                        STYLE: **DETAILED AND EDUCATIONAL**. 
+                        - Provide Step-by-Step instructions. Explain 'Why' this issue occurs.
+                        - Include potential costs or tools needed. Be thorough.
+                        """
+                    else:
+                        format_instructions = """
+                        STYLE: **CONCISE AND SURGICAL**.
+                        - Use the 'Step 1, Step 2' format.
+                        - **Maximum 15 words per step.**
+                        - Direct actions only. NO intro or concluding text.
+                        """
+
+                    system_prompt = f"""
+                    You are a skilled automotive technician using logical troubleshooting.
+                    VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
+
+                    ### GOLD STANDARD EXAMPLES ###
+                    Q: My car overheats in traffic.
+                    A: Step 1: Check if the radiator fan turns on when hot. 
+                    Step 2: Inspect coolant levels in the reservoir.
+                    Step 3: If levels are good, the thermostat may be stuck.
+                    ### END EXAMPLES ###
+
+                    LANGUAGE CONSTRAINT:
+                    - **OUTPUT MUST BE IN ENGLISH ONLY**.
+                    - Do NOT write in Urdu or the user's local script.
+                    
+                    {format_instructions}
+
+                    REPLY FORMAT:
+                    Step 1: [Action]
+                    Step 2: [Action]
+                    Step 3 (if needed): [Action/Safety Advice]
                     """
-                enhanced_system_prompt = f"""
-                You are a skilled automotive technician using logical troubleshooting.
+                    user_input_content = f"{user_prompt}\n\n(REMINDER: Respond in technical English ONLY)"
 
-VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
-### GOLD STANDARD EXAMPLES ###
-                Q: My car overheats in traffic.
-                A: Step 1: Check if the radiator fan turns on when hot. 
-                   Step 2: Inspect coolant levels in the reservoir.
-                   Step 3: If levels are good, the thermostat may be stuck.
-
-                Q: Brakes are squeaking.
-                A: Step 1: Inspect brake pads for wear indicators.
-                   Step 2: Check for debris trapped in the caliper.
-                ### END EXAMPLES ###
-LANGUAGE CONSTRAINT (VIOLATION WILL CAUSE SYSTEM FAILURE):
-                - **OUTPUT MUST BE IN ENGLISH ONLY**.
-                - The chat history contains Urdu/Local languages. **IGNORE THEM**.
-                - Do NOT reply in the user's language. 
-                - If you output Urdu/Arabic script here, the system will crash.
-                {format_instructions}
-INSTRUCTIONS:
-Read the problem description carefully. Provide the solution immediately based on the requested style. Do not include unnecessary explanation or speculative language.
-
-REPLY FORMAT:
-
-Step 1:
-- Describe the first, simplest test or fix.
-
-Step 2:
-- If Step 1 does not solve the issue, describe the next test or fix.
-
-Step 3 (if needed):
-- Describe when to stop DIY and consult a qualified mechanic (especially for safety-critical issues).
-
-GUIDELINES:
-- Be clear, direct and action oriented.  
-- No “Why” or “Most Likely Solution” headings — just give steps.  
-- No extra paragraphs or preamble. Begin immediately with “Step 1:”.  
-- Provide maximum 2–3 steps unless the issue demands more.  
-- Always prioritize safety: mention hazards early and advise professional help when required.
-
-Current User Query: "{inputs['prompt']}""
-                """
-
-
+                # 3. Prepare final LLM Input
                 llm_input = {
-                    # "system_prompt": self._get_vehicle_system_prompt(vehicle_info),
-                    "system_prompt": enhanced_system_prompt,
-                    "input": f"{inputs['prompt']}\n\n(REMINDER: Respond in technical English ONLY)",
+                    "system_prompt": system_prompt,
+                    "input": user_input_content,
                     "context": f"""
-                    Image Analysis:
-                    {inputs.get('context_1', 'No image analysis available')}
-                    
-                    Knowledge Base Context:
-                    {inputs.get('context_2', 'No knowledge base context available')}
-                    
-                    Multimodal Context:
-                    {inputs.get('multimodal_context', 'No additional context')}
+                    Image Analysis: {inputs.get('context_1', 'No image analysis available')}
+                    Knowledge Base Context: {context_data}
+                    Multimodal Context: {inputs.get('multimodal_context', 'No additional context')}
                     """,
                     "chat_history": chat_history_dicts,
                     "is_simple_response": False
                 }
                 
+                # 4. Invoke LLM and Post-Process
                 response = self.diagnostic_agent.invoke(llm_input)
+
+                # Final Security Check for Language
                 if self._contains_non_english_script(response):
-                    logger.warning("Brain failed to speak English. Forcing translation.")
-                    # Force it back to English
-                    response = await self.sandwich._quick_translate(response) # Reuse your quick translate tool
+                    logger.warning("LLM output contained non-English script. Forcing quick translation.")
+                    response = await self.sandwich._quick_translate(response)
 
                 return {**inputs, "diagnosis_output": response}
+
             except Exception as e:
                 logger.error(f"Diagnostic failed: {e}", exc_info=True)
-                return {**inputs, "diagnosis_output": "Diagnostic service unavailable"}
-        
+                return {**inputs, "diagnosis_output": "I apologize, the diagnostic service is currently unavailable. Please try again or consult a manual."}
+                
         return (
             RunnablePassthrough()
             | RunnableLambda(parallel_step)
@@ -951,7 +893,8 @@ Guidelines:
                 "image_url": image_url,
                 "vehicle": vehicle.model_dump() if vehicle else {},
                 "chat_history": session.chat_history,
-                "intent": intent 
+                "intent": intent,
+                "processing_path": processing_path  # <--- ADD THIS LINE
             }
             
             # 4. Execute "The Brain" (Step 2)
