@@ -60,82 +60,25 @@ class ChatService:
             
         return False
 
-    def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag_static", "rag_dynamic", "command", "off_topic"]:
-        logger.info(f"Expert Router -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
-
-        # 1. INITIAL GUARDRAILS (Highest Priority)
-        if self._is_off_topic_or_inappropriate(user_input):
-            return "off_topic"
-
+    def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> str:
         clean_input = user_input.lower()
-
-        # 2. IMAGE LOGIC (Prioritize text if provided with image)
-        if has_image:
-            # If user provided an image AND text, we check the text to see if it's a dynamic question
-            # Example: User uploads a photo of a dent and asks "How much to fix this?"
-            dynamic_indicators = [
-                "price", "cost", "recall", "software", "update", "latest", 
-                "dent", "scratch", "paint", "worth", "camera issue", "2025", "2026"
-            ]
-            if any(word in clean_input for word in dynamic_indicators):
-                logger.info("📸 Image + Dynamic Text detected. Routing to Web Search.")
-                return "rag_dynamic"
-            
-            # If it's just an image or image + "What is this?", we use static RAG for diagnosis
-            logger.info("📸 Image detected. Routing to Static RAG for Visual Diagnosis.")
-            return "rag_static"
-
-        # --- 3. TECHNICAL EXPERT ROUTER ---
-        technical_indicators = [
-            "car", "bike", "vehicle", "scooter", "motorcycle", "auto", "automobile",
-            "shake", "shaking", "vibrate", "vibration", "noise", "sound", "clicking", 
-            "smoke", "smell", "leak", "leaking", "hot", "overheat", "dim", "heavy",
-            "stuck", "jerking", "hesitating", "pulling", "wobble", "shudder",
-            "start", "fire", "crank", "ignition", "broke", "fix", "repair", "issue", 
-            "problem", "error", "check", "light", "warning", "code", "p0", "service",
-            "engine", "battery", "tire", "brake", "steering", "gear", "clutch", "fuel",
-            "coolant", "radiator", "plug", "headlight", "suspension", "exhaust"
-        ]
-
-        # Check if the user is asking a technical/vehicle question
-        if intent == "technical_question" or any(ind in clean_input for ind in technical_indicators):
-            
-            # Category A: Dynamic Technical (Bypass Manual)
-            # These are issues manuals CANNOT answer (Live prices, software bugs, bodywork)
-            dynamic_indicators = [
-                "price", "cost", "recall", "software", "update", "latest", 
-                "dent", "scratch", "paint", "rust", "detailing", "near me", "worth",
-                "camera issue", "infotainment", "glitch", "connectivity", "2025", "2026"
-            ]
-            
-            if any(word in clean_input for word in dynamic_indicators):
-                logger.info("🌐 Dynamic Technical Query detected. Routing to Web Search.")
-                return "rag_dynamic"
-            
-            # Category B: Static Technical (Manual First)
-            # These are mechanical repairs found in your PDF
-            logger.info("📖 Static Technical Query detected. Routing to Manual RAG.")
-            return "rag_static"
-
-        # --- 4. CONTEXT MODIFICATIONS ---
-        modification_keywords = ["shorter", "brief", "summarize", "detail", "explain", "repeat", "simplify"]
+        if self._is_off_topic_or_inappropriate(clean_input): return "off_topic"
+        
+        # Follow-up keywords
+        modification_keywords = ["shorter", "brief", "summarize", "detail", "explain", "repeat", "more"]
+        
         if any(word in clean_input for word in modification_keywords):
-            return "rag_static"
+            return "rag_static" # Will be handled by follow-up logic in retrieval_chain
 
-        # --- 5. COMMANDS ---
-        if intent == "command":
-            command_keywords = ["turn", "switch", "open", "close", "start", "stop", "activate"]
-            if any(word in clean_input for word in command_keywords):
-                return "command"
-            return "rag_static"
+        technical_indicators = ["car", "bike", "engine", "brake", "leak", "noise", "light", "start", "fix"]
+        if intent == "technical_question" or any(ind in clean_input for ind in technical_indicators):
+            dynamic_indicators = ["price", "cost", "near me", "worth", "2025", "latest", "software"]
+            return "rag_dynamic" if any(w in clean_input for w in dynamic_indicators) else "rag_static"
 
-        # --- 6. CONVERSATIONAL/SMALL TALK ---
-        if intent in ["greeting", "small_talk", "other"]:
-            return "simple"
-
-        # Default Fallback
+        if intent in ["greeting", "small_talk"]: return "simple"
         return "rag_static"
-    
+
+
     def _create_simple_response_chain(self) -> RunnableSerializable:
         """Chain for simple responses (greetings, small talk)"""
         async def simple_response(inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -279,29 +222,36 @@ class ChatService:
                 return {"context_1": "Image analysis failed", **inputs}
 
         async def query_expansion_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """Rewrite user query to be more search-friendly"""
+            """Rewrite user query to be more search-friendly, skipping for simple follow-ups."""
             original_prompt = inputs["prompt"]
+            
+            # LATENCY OPTIMIZATION: Skip expansion if the user is just modifying a previous answer
+            modification_keywords = ["shorter", "brief", "summarize", "detail", "explain", "repeat", "more", "bullets"]
+            if any(word in original_prompt.lower() for word in modification_keywords):
+                logger.info("Follow-up modification detected. Skipping Query Expansion for speed.")
+                return {**inputs, "search_queries": []}
+
             expansion_prompt = f"""
-    You are an expert mechanic. The user is asking a question in non-technical language.
-    
-            Generate 3 distinct search queries for: "{original_prompt} and consider the chat history for context. CHAT HISTORY: {inputs.get('chat_history', [])}"
-            1. Technical translation
-            2. Symptom-based query
-            3. Component-focused query
-            Output ONLY the 3 queries separated by newlines. No numbering.
+            You are an expert mechanic. Generate 3 distinct search queries for: "{original_prompt}"
+            Consider the vehicle context and symptoms.
+            
+            Output ONLY the 3 queries separated by newlines. No numbering. No intro.
             """
 
-            # Call a cheaper/faster model for this if possible
-            optimized_query = await self.diagnostic_agent.ainvoke({
-                "system_prompt": "You are a query optimizer.",
-                "input": expansion_prompt,
-                "chat_history": [],
-                "is_simple_response": True 
-            })
-            
-            # Update the prompt used for RETRIEVAL, but keep original for Generation
-            queries = [q.strip() for q in optimized_query.split('\n') if q.strip()]
-            return {**inputs, "search_queries": queries[:3]}
+            try:
+                optimized_query = await self.diagnostic_agent.ainvoke({
+                    "system_prompt": "You are a technical search optimizer.",
+                    "input": expansion_prompt,
+                    "chat_history": [],
+                    "is_simple_response": True 
+                })
+                
+                queries = [q.strip() for q in optimized_query.split('\n') if q.strip()]
+                return {**inputs, "search_queries": queries[:3]}
+            except Exception as e:
+                logger.error(f"Query expansion failed: {e}")
+                return {**inputs, "search_queries": []}
+
 
         async def parallel_step(inputs: Dict[str, Any]):
             """Runs expansion and image analysis at the same time to reduce latency."""
@@ -311,411 +261,118 @@ class ChatService:
             # Combine results from both chains
             return {**results[0], **results[1]}
 
-        # async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        #     """
-        #     Retrieve relevant information from vector store with proper score handling
-        #     and expose retrieved documents for testing/evaluation.
-        #     """
-        #     try:
-        #         vehicle = inputs.get("vehicle", {})
-        #         chat_history = inputs.get("chat_history", [])
-                
-        #         # 1. Use the Optimized Query from expansion chain
-        #         search_query = inputs.get("search_query", inputs["prompt"])
-                
-        #         # 2. Embed ONLY the English translation/optimized query
-        #         query_embedding = await embed_text(search_query)
-                
-        #         # 3. Increase K to improve Top-5 metrics
-        #         k_value = 5 
-
-                
-        #         # 5. First Search Attempt (Specific)
-        #         docs_and_scores = await self.vectorstore.asimilarity_search_with_score_by_vector(
-        #             query_embedding,
-        #             k=k_value,
-        #             filter=None
-        #         )
-
-        #         # Normalize docs_and_scores to list of (Document, score)
-        #         normalized = []
-        #         for item in docs_and_scores:
-        #             if isinstance(item, tuple) and len(item) == 2:
-        #                 doc, score = item
-        #             elif hasattr(item, "page_content"):
-        #                 doc = item
-        #                 score = None # Should ideally not happen with search_with_score
-        #             else:
-        #                 continue
-        #             normalized.append((doc, score))
-
-        #         # --- NEW: Relevancy Check & Filtering ---
-        #         valid_docs = []
-        #         for doc, score in normalized:
-        #             # Threshold: Adjust based on your vector store metric
-        #             # If using Cosine similarity (0 to 1), < 0.65 might be irrelevant
-        #             # If using L2 distance, > threshold is irrelevant
-        #             if score is not None and score > 1.2: # Example threshold for "too far away"
-        #                 continue 
-        #             valid_docs.append(doc)
-                
-        #         if not valid_docs:
-        #             text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
-        #         else:
-        #             text_context = "\n---\n".join([doc.page_content for doc in valid_docs])
-
-        #         # Build multimodal context (for images) based on valid docs
-        #         multimodal_context = []
-        #         for doc in valid_docs:
-        #             if doc.metadata.get("type") == "image":
-        #                 image_id = doc.metadata.get("image_id")
-        #                 if image_id in self.image_data_store:
-        #                     multimodal_context.append({
-        #                         "type": "image_url",
-        #                         "image_url": {
-        #                             "url": f"data:image/png;base64,{self.image_data_store[image_id]}"
-        #                         }
-        #                     })
-
-        #         # Build retrieved_context for evaluation (Keep originals for metrics)
-        #         retrieved_context = [
-        #             {
-        #                 "doc_id": doc.metadata.get("source", "unknown"),
-        #                 "page": doc.metadata.get("page", "unknown"),
-        #                 "score": round(score, 3) if isinstance(score, (int, float)) else None
-        #             }
-        #             for doc, score in normalized
-        #         ]
-
-        #         # Return complete response
-        #         return {
-        #             **inputs,
-        #             "context_2": text_context,
-        #             "multimodal_context": multimodal_context,
-        #             "retrieved_context": retrieved_context
-        #         }
-
-        #     except Exception as e:
-        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
-        #         return {
-        #             **inputs,
-        #             "context_2": "Knowledge retrieval failed",
-        #             "retrieved_context": []
-        #         }
-          
-        # async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        #     """
-        #     Debug Version: Prints RAW SCORES to terminal.
-        #     """
-        #     try:
-        #         vehicle = inputs.get("vehicle", {})
-        #         chat_history = inputs.get("chat_history", [])
-                
-        #         # 1. Get Queries
-        #         base_query = inputs.get("search_query", inputs["prompt"])
-        #         queries = inputs.get("search_queries", [base_query])
-        #         if isinstance(queries, str): queries = [queries]
-
-        #         print(f"\n🔎 [DEBUG] Searching for: {queries}")
-
-        #         # 2. Async Parallel Search
-        #         async def process_single_query(query_text):
-        #             try:
-        #                 # ✅ FIX: Handle Async/Sync Embedding correctly
-        #                 if asyncio.iscoroutinefunction(embed_text):
-        #                     query_embedding = await embed_text(query_text)
-        #                 else:
-        #                     query_embedding = await asyncio.to_thread(embed_text, query_text)
-                        
-        #                 # Fetch Top 5 for THIS variation
-        #                 return await self.vectorstore.asimilarity_search_with_score_by_vector(
-        #                     query_embedding, k=5
-        #                 )
-        #             except Exception as e:
-        #                 logger.error(f"Search failed: {e}")
-        #                 return []
-
-        #         # 3. Execute
-        #         results_list = await asyncio.gather(*[process_single_query(q) for q in queries])
-        #         all_docs = [item for sublist in results_list for item in sublist]
-
-        #         # 4. Deduplicate
-        #         unique_docs = {}
-        #         for item in all_docs:
-        #             if isinstance(item, tuple): doc, score = item
-        #             else: doc, score = item, 100.0
-                    
-        #             key = f"{doc.metadata.get('source')}_{doc.metadata.get('page')}"
-                    
-        #             # Logic: Lower score is better
-        #             if key not in unique_docs or score < unique_docs[key][1]:
-        #                 unique_docs[key] = (doc, score)
-
-        #         # 5. Normalize & Log Scores
-        #         normalized = list(unique_docs.values())
-        #         normalized.sort(key=lambda x: x[1]) # Sort best (lowest) first
-
-        #         # --- DEBUG PRINT ---
-        #         if normalized:
-        #             print(f"📊 [DEBUG] Top 3 Raw Scores (Lower is better):")
-        #             for i, (d, s) in enumerate(normalized[:3]):
-        #                 print(f"   {i+1}. Score: {s:.4f} | Source: {d.metadata.get('source')} Page {d.metadata.get('page')}")
-        #         else:
-        #             print("⚠️ [DEBUG] No documents returned from vector store!")
-        #         # -------------------
-
-        #         # 6. Relaxed Filter
-        #         valid_docs = []
-        #         for doc, score in normalized:
-        #             # CHANGED: Increased threshold from 1.2 to 1.5 to be safe
-        #             # If scores are mostly 1.3 or 1.4, this will catch them.
-        #             if score is not None and score > 1.5: 
-        #                 continue 
-        #             valid_docs.append(doc)
-                
-        #         # FALLBACK: Always keep Top 1 if everything else failed
-        #         if not valid_docs and normalized:
-        #             print("⚠️ [DEBUG] Threshold excluded all. Using Top 1 fallback.")
-        #             valid_docs.append(normalized[0][0])
-
-        #         # 7. Build Context
-        #         text_context = "\n---\n".join([d.page_content for d in valid_docs]) if valid_docs else "NO_RELEVANT_TECHNICAL_DATA_FOUND"
-
-        #         # 8. Evaluation Metadata
-        #         retrieved_context = [
-        #             {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "score": round(s, 3)}
-        #             for d, s in normalized[:10]
-        #         ]
-
-        #         return {
-        #             **inputs,
-        #             "context_2": text_context,
-        #             "retrieved_context": retrieved_context
-        #         }
-
-        #     except Exception as e:
-        #         logger.error(f"Retrieval failed: {e}", exc_info=True)
-        #         return {**inputs, "context_2": "Error", "retrieved_context": []}
-
-       
         async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             try:
-                original_prompt = inputs.get("prompt", "")
-                # Get the path decided by _determine_processing_path
-                path = inputs.get("processing_path", "rag_static")
-                expansion_results = inputs.get("search_queries", [])
-                search_list = [original_prompt] + expansion_results
+                original_prompt = inputs.get("prompt", "").lower()
+                chat_history = inputs.get("chat_history", [])
+                
+                # --- FIX 1: FOLLOW-UP CONTEXT LOGIC ---
+                modification_keywords = ["shorter", "brief", "summarize", "detail", "explain", "more"]
+                is_follow_up = any(word in original_prompt for word in modification_keywords)
 
-                final_docs = []
-                sorted_candidates = []
-                is_web_result = False
+                if is_follow_up and len(chat_history) > 0:
+                    # Look for the last assistant response in history
+                    last_ai_msgs = [m for m in chat_history if (isinstance(m, dict) and m.get("role") == "assistant") or (hasattr(m, 'role') and m.role == 'assistant')]
+                    if last_ai_msgs:
+                        content = last_ai_msgs[-1]["content"] if isinstance(last_ai_msgs[-1], dict) else last_ai_msgs[-1].content
+                        logger.info("Follow-up detected. Using previous answer as context.")
+                        return {**inputs, "context_2": f"PREVIOUS_ANSWER_TO_MODIFY: {content}", "retrieved_context": []}
 
-                # --- PATH A: EXPERT DYNAMIC ROUTE (Direct to Web) ---
-                if path == "rag_dynamic":
-                    logger.info("🌐 Expert Router: Dynamic Path. Skipping Manual for Tavily...")
+                # --- PATH A: WEB SEARCH ---
+                if inputs.get("processing_path") == "rag_dynamic":
                     web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
-                    
-                    if web_results:
-                        # 1. Handle Case where Tavily returns a simple string
-                        if isinstance(web_results, str):
-                            web_content = web_results
-                        
-                        # 2. Handle Case where Tavily returns a list (the intended way)
-                        elif isinstance(web_results, list):
-                            processed_results = []
-                            for res in web_results:
-                                if isinstance(res, dict):
-                                    source = res.get('url', 'Unknown Source')
-                                    content = res.get('content', str(res))
-                                    processed_results.append(f"Source: {source}\n{content}")
-                                else:
-                                    # Fallback if the list contains strings instead of dicts
-                                    processed_results.append(str(res))
-                            web_content = "\n---\n".join(processed_results)
-                        
-                        # 3. Fallback for any other type
-                        else:
-                            web_content = str(web_results)
+                    content = str(web_results)
+                    return {**inputs, "context_2": f"*** WEB DATA ***\n{content}", "retrieved_context": []}
 
-                        final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
-                        is_web_result = True
-                # --- PATH B: EXPERT STATIC ROUTE (Manual Search) ---
-                else:
-                    async def process_single_query(q_text):
-                        emb = await embed_text(q_text) if asyncio.iscoroutinefunction(embed_text) else await asyncio.to_thread(embed_text, q_text)
-                        return await self.vectorstore.asimilarity_search_with_score_by_vector(emb, k=5)
+                # --- PATH B: STATIC MANUAL SEARCH ---
+                search_list = [original_prompt] + inputs.get("search_queries", [])
+                async def fetch_docs(q):
+                    emb = await embed_text(q)
+                    return await self.vectorstore.asimilarity_search_with_score_by_vector(emb, k=3)
 
-                    results_list = await asyncio.gather(*[process_single_query(q) for q in search_list])
-
-                    rrf_scores = {}
-                    k = 60
-                    threshold = 1.3 
-                    
-                    for search_results in results_list:
-                        for rank, (doc, l2_score) in enumerate(search_results, 1):
-                            if l2_score > threshold: continue 
-                            key = f"{doc.metadata.get('source', 'unk')}_{doc.metadata.get('page', 'unk')}"
-                            if key not in rrf_scores: rrf_scores[key] = [doc, 0.0]
-                            rrf_scores[key][1] += 1.0 / (k + rank)
-
-                    sorted_candidates = sorted(rrf_scores.values(), key=lambda x: x[1], reverse=True)
-                    final_docs = [item[0] for item in sorted_candidates[:5]]
-
-                    # SAFETY FALLBACK: If Static path fails to find manual data, try Web
-                    if not final_docs:
-                        vehicle_anchors = ["car", "bike", "vehicle", "engine", "brake", "battery", "tesla"]
-                        if any(w in original_prompt.lower() for w in vehicle_anchors):
-                            logger.info("⚠️ Static Search failed. Trying Web Fallback...")
-                            web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
-                            if web_results:
-                                web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
-                                final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
-                                is_web_result = True
-                        else:
-                            return {**inputs, "context_2": "NO_RELEVANT_TECHNICAL_DATA_FOUND", "retrieved_context": []}
-
-                # --- STEP 5: CONTEXT ASSEMBLY ---
-                text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_DATA"
-                if is_web_result: 
-                    text_context = f"*** WEB DATA ***\n{text_context}"
-
-                retrieved_context = [
-                    {"doc_id": d.metadata.get("source"), "rrf_score": round(score, 4)}
-                    for d, score in sorted_candidates[:5]
-                ]
-
-                return {**inputs, "context_2": text_context, "retrieved_context": retrieved_context}
-
+                results = await asyncio.gather(*[fetch_docs(q) for q in search_list])
+                # Simple flatten and deduplicate
+                unique_docs = {doc.page_content: doc for sublist in results for doc, score in sublist if score < 1.4}
+                text_context = "\n---\n".join(unique_docs.keys()) if unique_docs else "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                
+                return {**inputs, "context_2": text_context, "retrieved_context": []}
             except Exception as e:
-                logger.error(f"Retrieval failed: {e}", exc_info=True)
+                logger.error(f"Retrieval failed: {e}")
                 return {**inputs, "context_2": "Error", "retrieved_context": []}
-       
+
+        
+
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """Generate diagnostic response using the LLM with Expert System Fallbacks"""
+            """Generate diagnostic response using the LLM with Expert System Fallbacks."""
             try:
-                # 1. Prepare Vehicle Info & Context
+                # 1. Prepare Vehicle Info
                 context_data = inputs.get('context_2', '')
                 vehicle = inputs.get("vehicle", {})
-                vehicle_info = {
-                    "make": vehicle.get("brand", "Unknown"),
-                    "model": vehicle.get("model", "Unknown"),
-                    "year": vehicle.get("year", "Unknown"),
-                    "fuel_type": vehicle.get("fuel_type", "Unknown"),
-                    "engine_type": vehicle.get("engine_type", "Unknown")
-                }
+                vehicle_info = f"{vehicle.get('brand', 'Unknown')} {vehicle.get('model', 'Unknown')} ({vehicle.get('year', 'Unknown')})"
                 
-                # Convert ChatMessage objects to dict for the LLM
+                # 2. STANDARD HISTORY CONVERSION (Fixes history loss)
                 chat_history_dicts = []
                 for msg in inputs.get("chat_history", []):
-                    if hasattr(msg, 'model_dump'):
-                        chat_history_dicts.append(msg.model_dump())
-                    elif isinstance(msg, dict):
+                    if isinstance(msg, dict):
                         chat_history_dicts.append(msg)
+                    elif hasattr(msg, 'model_dump'):
+                        chat_history_dicts.append(msg.model_dump())
                     else:
                         chat_history_dicts.append({"role": "user", "content": str(msg)})
 
                 user_prompt = inputs['prompt']
                 user_prompt_lower = user_prompt.lower()
 
-                # 2. Check for "No Data" signal (Expert Fallback Logic)
+                # 3. EXPERT FALLBACK LOGIC (No Data Handling)
                 is_fallback = "NO_DATA" in context_data or "NO_RELEVANT_TECHNICAL_DATA_FOUND" in context_data
-
-                if is_fallback:
-                    # --- Tier 3: Safe Refusal & General Advice ---
-                    system_prompt = f"""
-                    You are a professional automotive technician. 
-                    CRITICAL: I do not have specific repair data for this exact issue in my database or the web.
-                    
-                    Instructions:
-                    1. Apologize professionally for not having the specific technical steps for this {vehicle_info['make']} {vehicle_info['model']}.
-                    2. Provide 3 universal safety/basic checks:
-                    - Check battery terminal connections and voltage.
-                    - Inspect for any visible fluid leaks or loose wiring.
-                    - Check the relevant fuses in the engine bay fuse box.
-                    3. Strictly advise the user to visit a certified mechanic or service center.
-                    4. Do NOT hallucinate specific torque specs or wiring colors.
-                    5. OUTPUT MUST BE IN ENGLISH ONLY.
-                    """
-                    user_input_content = f"I couldn't find specific technical data for: {user_prompt}. Give me general safety advice."
                 
+                if is_fallback:
+                    system_prompt = f"You are a professional mechanic. I do not have specific manual data for this {vehicle_info}. Provide universal safety checks and advise visiting a certified technician. ENGLISH ONLY."
+                    user_input_content = f"Technical data unavailable for: {user_prompt}. Provide general safety advice."
                 else:
-                    # --- Tier 1 & 2: Standard Technical Diagnostic Mode ---
-                    
-                    # Determine Format Instructions based on user style
-                    concise_keywords = ["short", "brief", "summar", "quick", "concise", "simple", "few words"]
-                    detailed_keywords = ["detail", "explain", "elaborate", "why", "more info", "depth"]
-                    exact_keywords = ["exact", "verbatim", "copy", "quote", "repeat"]
-
-                    is_detailed = any(w in user_prompt_lower for w in detailed_keywords)
-                    is_exact = any(w in user_prompt_lower for w in exact_keywords)
-                    
-                    if is_exact:
-                        format_instructions = "STYLE: **OBEY USER INSTRUCTIONS**. Follow the User Query format precisely."
-                    elif is_detailed:
-                        format_instructions = """
-                        STYLE: **DETAILED AND EDUCATIONAL**. 
-                        - Provide Step-by-Step instructions. Explain 'Why' this issue occurs.
-                        - Include potential costs or tools needed. Be thorough.
-                        """
-                    else:
-                        format_instructions = """
-                        STYLE: **CONCISE AND SURGICAL**.
-                        - Use the 'Step 1, Step 2' format.
-                        - **Maximum 15 words per step.**
-                        - Direct actions only. NO intro or concluding text.
-                        """
+                    # 4. DYNAMIC STYLE SELECTION
+                    style = "CONCISE (Step-by-step, max 15 words per step)"
+                    if any(w in user_prompt_lower for w in ["detail", "explain", "elaborate", "why"]):
+                        style = "DETAILED (Explain the cause and step-by-step fix)"
+                    elif "bullets" in user_prompt_lower:
+                        style = "BULLET POINTS ONLY"
 
                     system_prompt = f"""
-                    You are a skilled automotive technician using logical troubleshooting.
-                    VEHICLE: {vehicle_info['make']} {vehicle_info['model']} ({vehicle_info['year']})
-
-                    ### GOLD STANDARD EXAMPLES ###
-                    Q: My car overheats in traffic.
-                    A: Step 1: Check if the radiator fan turns on when hot. 
-                    Step 2: Inspect coolant levels in the reservoir.
-                    Step 3: If levels are good, the thermostat may be stuck.
-                    ### END EXAMPLES ###
-
-                    LANGUAGE CONSTRAINT:
-                    - **OUTPUT MUST BE IN ENGLISH ONLY**.
-                    - Do NOT write in Urdu or the user's local script.
+                    You are a skilled automotive technician. 
+                    VEHICLE: {vehicle_info}
+                    STYLE: {style}
                     
-                    {format_instructions}
-
-                    REPLY FORMAT:
-                    Step 1: [Action]
-                    Step 2: [Action]
-                    Step 3 (if needed): [Action/Safety Advice]
+                    TECHNICAL RULES:
+                    - Respond in ENGLISH ONLY.
+                    - If follow-up instructions (like 'shorter') are given, obey them based on the context provided.
+                    - Use logical troubleshooting.
                     """
-                    user_input_content = f"{user_prompt}\n\n(REMINDER: Respond in technical English ONLY)"
+                    user_input_content = user_prompt
 
-                # 3. Prepare final LLM Input
+                # 5. INVOKE AGENT
                 llm_input = {
                     "system_prompt": system_prompt,
                     "input": user_input_content,
-                    "context": f"""
-                    Image Analysis: {inputs.get('context_1', 'No image analysis available')}
-                    Knowledge Base Context: {context_data}
-                    Multimodal Context: {inputs.get('multimodal_context', 'No additional context')}
-                    """,
+                    "context": f"Manual/Web Knowledge: {context_data}\nImage Analysis: {inputs.get('context_1', 'N/A')}",
                     "chat_history": chat_history_dicts,
                     "is_simple_response": False
                 }
                 
-                # 4. Invoke LLM and Post-Process
-                response = self.diagnostic_agent.invoke(llm_input)
+                response = await self.diagnostic_agent.ainvoke(llm_input)
 
-                # Final Security Check for Language
+                # 6. QUALITY CHECK
                 if self._contains_non_english_script(response):
-                    logger.warning("LLM output contained non-English script. Forcing quick translation.")
-                    response = await self.sandwich._quick_translate(response)
+                    logger.warning("Urdu detected in Technical Response. Forcing English Correction.")
+                    # Simple logic to re-prompt or translate if necessary
+                    response = await self.sandwich.translate_output(response, target_language="English")
 
                 return {**inputs, "diagnosis_output": response}
 
             except Exception as e:
                 logger.error(f"Diagnostic failed: {e}", exc_info=True)
-                return {**inputs, "diagnosis_output": "I apologize, the diagnostic service is currently unavailable. Please try again or consult a manual."}
-                
+                return {**inputs, "diagnosis_output": "I encountered an error generating the diagnosis. Please try again."}
+
+
         return (
             RunnablePassthrough()
             | RunnableLambda(parallel_step)
@@ -797,60 +454,6 @@ Guidelines:
 5. Maintain conversation context
 6. For complex issues, recommend professional help
 7. Adapt your tone based on the conversation - be more technical for diagnosis, more conversational for greetings"""
-    # ==========Old Process Message Method=======
-    # async def process_message(
-    #     self,
-    #     session: ChatSession,
-    #     user_input: str,
-    #     image_url: Optional[str] = None,
-    #     vehicle: Optional[VehicleModel] = None
-    # ) -> Dict[str, Any]:
-    #     """
-    #     Process a user message through the complete chain
-        
-    #     Args:
-    #         session: Current chat session
-    #         user_input: User's message text
-    #         image_url: Optional image URL/path
-    #         vehicle: Optional vehicle information
-            
-    #     Returns:
-    #         Dictionary containing:
-    #         - response: Generated diagnosis/response
-    #         - updated_session: Updated chat session
-    #     """
-    #     try:
-    #         if image_url:
-    #             session.image_history.append(image_url)
-            
-    #         if vehicle:
-    #             session.vehicle_info = vehicle
-
-    #         # Prepare chain input
-    #         inputs = {
-    #             "prompt": user_input,
-    #             "image_url": image_url,
-    #             "vehicle": vehicle.model_dump() if vehicle else {},
-    #             "chat_history": session.chat_history
-    #         }
-            
-    #         # Process through chain
-    #         result = await self.chain.ainvoke(inputs)
-            
-    #         # Handle response
-    #         diagnosis = result.get("diagnosis_output", "")
-            
-    #         # Generate title if first message
-    #         if len(session.chat_history) <= 2 and not session.chat_title:
-    #             session.chat_title = await self.generate_chat_title(user_input)
-                
-    #         return {
-    #             "response": diagnosis,
-    #             "updated_session": session
-    #         }
-    #     except Exception as e:
-    #         logger.error(f"Message processing failed: {e}", exc_info=True)
-    #         raise
     
     
     # ==========New Process Message Method========
@@ -909,10 +512,12 @@ Guidelines:
 
             # 5. Translate Response (Step 3)
             # The Sandwich closes here. Translates English Diagnostic -> User's Preferred Language
-            final_response = await self.sandwich.translate_output(
-                english_response, 
-                target_language=target_lang
-            )
+            if target_lang.lower() in ["en", "english", "eng"]:
+                final_response = english_response
+                logger.info("Target language is English. Skipping translation step.")
+            else:
+                final_response = await self.sandwich.translate_output(english_response, target_language=target_lang)
+
             session.chat_history.append({"role": "user", "content": english_text})
             session.chat_history.append({"role": "assistant", "content": english_response})
 
