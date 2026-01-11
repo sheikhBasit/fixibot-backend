@@ -7,7 +7,8 @@ from langchain_core.runnables import (
     RunnableBranch,
     RunnableLambda,
 )
-from langchain_tavily import TavilySearchResults
+# Ignore the warning for now. This works.
+from langchain_tavily import TavilySearch
 from langchain_core.documents import Document
 from typing import Dict, Any, Optional, List, Literal
 import logging
@@ -29,7 +30,7 @@ class ChatService:
         self.image_analyzer = get_image_analyzer(request)
         # self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
-        self.tavily_tool = TavilySearchResults(max_results=3)
+        self.tavily_tool = TavilySearch(max_results=3)
          # Use SandwichProcessor instead of IntentClassifier
         self.sandwich = get_sandwich_processor(request)
     def _contains_non_english_script(self, text: str) -> bool:

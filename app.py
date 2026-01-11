@@ -6,6 +6,7 @@ from typing import AsyncIterator, Optional
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from utils.rate_limiter import limiter
 import logging
 from middlewares.error_handler import ErrorHandlingMiddleware
 from middlewares.limit_handler import LimitRequestSizeMiddleware
@@ -150,8 +151,6 @@ app = FastAPI(
     openapi_version="3.0.3"
 )
 
-# Rate limiter setup
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) # type: ignore
 

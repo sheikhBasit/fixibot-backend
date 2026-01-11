@@ -14,7 +14,7 @@ from services.cloudinary import upload_image
 from storage.session_manager import SessionManager
 from utils.user import get_current_user
 from config import settings
-
+from utils.rate_limiter import limiter
 from services.intent_classifier import SandwichProcessor
 from services.dependencies import get_sandwich_processor
 
@@ -147,6 +147,7 @@ async def start_chat_session(user: dict = Depends(get_current_user)):
 #         raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
 
 @router.post("/message")
+@limiter.limit("5/minute") 
 async def process_message(
     request: Request,
     session_id: Optional[str] = Form(None),
