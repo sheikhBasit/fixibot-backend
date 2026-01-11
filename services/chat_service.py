@@ -45,9 +45,10 @@ class ChatService:
         """Check if the message is off-topic or inappropriate"""
         # List of non-automotive topics to redirect
         off_topic_keywords = [
-            "food", "restaurant", "movie", "weather", "sports", "game",
-            "politics", "dating", "cryptocurrency", "stock market"
-        ]
+        "food", "restaurant", "movie", "weather", "sports", "politics", 
+        "dating", "crypto", "stock market", "price of tesla", "finance",
+        "recipe", "music", "celebrity", "history", "gaming"
+    ]
         
         # Check for off-topic conversations
         if any(keyword in text.lower() for keyword in off_topic_keywords):
@@ -478,90 +479,154 @@ class ChatService:
         #         return {**inputs, "context_2": "Error", "retrieved_context": []}
 
         async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
+
             try:
-                # 1. Setup
+
                 original_prompt = inputs.get("prompt", "")
-                # Get expansion queries from Step 1
+
                 expansion_results = inputs.get("search_queries", [])
-                
-                # Combined list: [Original, Q1, Q2, Q3]
+
                 search_list = [original_prompt] + expansion_results
 
-                # 2. Async Parallel Search
-                async def process_single_query(query_text):
-                    try:
-                        if asyncio.iscoroutinefunction(embed_text):
-                            query_embedding = await embed_text(query_text)
-                        else:
-                            query_embedding = await asyncio.to_thread(embed_text, query_text)
-                        
-                        # Fetch Top 5 for each query variation
-                        return await self.vectorstore.asimilarity_search_with_score_by_vector(
-                            query_embedding, k=5
-                        )
-                    except Exception as e:
-                        logger.error(f"Search failed: {e}")
-                        return []
 
-                # Run all searches in parallel
-                # results_list will be a list of lists: [[(doc, score), ...], [(doc, score), ...]]
-                results_list = await asyncio.gather(*[process_single_query(q) for q in search_list])
+                # --- STEP 1: WEAK KNOWLEDGE GATE (Trigger Web Early) ---
 
-                # 3. Reciprocal Rank Fusion (RRF) for High Precision
-                # Formula: score = sum( 1 / (k + rank) )
-                rrf_scores = {} # Key: (source, page) -> Value: [doc_object, rrf_score]
-                k = 60 # Constant for RRF stability
+                # Keywords that we KNOW are not in mechanical manuals
 
-                for search_results in results_list:
-                    for rank, (doc, l2_score) in enumerate(search_results, 1):
-                        # Filter out garbage immediately (Precision Guardrail)
-                        if l2_score > 1.3: continue 
-                        
-                        src = doc.metadata.get('source', 'unk')
-                        pg = doc.metadata.get('page', 'unk')
-                        key = f"{src}_{pg}"
-                        
-                        if key not in rrf_scores:
-                            rrf_scores[key] = [doc, 0.0]
-                        
-                        # Add RRF boost based on rank in this specific search result
-                        rrf_scores[key][1] += 1.0 / (k + rank)
+                web_priority_indicators = [
 
-                # 4. Sort by RRF Score (Descending - Higher is better)
-                sorted_candidates = sorted(rrf_scores.values(), key=lambda x: x[1], reverse=True)
-                final_docs = [item[0] for item in sorted_candidates[:5]] # Keep Top 5 most precise
+                    "price", "cost", "recall", "tsb", "software", "update", "app",
 
-                # 5. Tavily Fallback (Only if RRF found nothing)
-                is_web_result = False
-                if not final_docs:
-                    logger.info("⚠️ No local precision match. Triggering Tavily...")
-                    web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
-                    if web_results:
-                        web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
-                        final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
-                        is_web_result = True
+                    "dent", "scratch", "paint", "rust", "detailing", "near me", "worth",
 
-                # 6. Build Context
-                text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_DATA"
-                if is_web_result: text_context = f"*** WEB DATA ***\n{text_context}"
+                    "camera issue", "infotainment", "glitch", "connectivity"
 
-                # Evaluation Metadata
-                retrieved_context = [
-                    {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "rrf_score": round(score, 4)}
-                    for d, score in sorted_candidates[:5]
                 ]
 
-                return {
-                    **inputs,
-                    "context_2": text_context,
-                    "retrieved_context": retrieved_context
-                }
+                
+
+                clean_prompt = original_prompt.lower()
+
+                # If these words exist, we force the local search to 'fail' to trigger Tavily
+
+                force_web = any(word in clean_prompt for word in web_priority_indicators)
+
+
+                final_docs = []
+
+                sorted_candidates = []
+
+                is_web_result = False
+
+
+                if not force_web:
+
+                    # --- STEP 2: LOCAL VECTOR SEARCH ---
+
+                    async def process_single_query(q_text):
+
+                        emb = await embed_text(q_text) if asyncio.iscoroutinefunction(embed_text) else await asyncio.to_thread(embed_text, q_text)
+
+                        return await self.vectorstore.asimilarity_search_with_score_by_vector(emb, k=5)
+
+
+                    results_list = await asyncio.gather(*[process_single_query(q) for q in search_list])
+
+
+                    # --- STEP 3: RRF FUSION & THRESHOLD ---
+
+                    rrf_scores = {}
+
+                    k = 60
+
+                    threshold = 1.3 # Lowered to ensure high-quality local matches only
+
+                    
+
+                    for search_results in results_list:
+
+                        for rank, (doc, l2_score) in enumerate(search_results, 1):
+
+                            if l2_score > threshold: continue 
+
+                            key = f"{doc.metadata.get('source', 'unk')}_{doc.metadata.get('page', 'unk')}"
+
+                            if key not in rrf_scores: rrf_scores[key] = [doc, 0.0]
+
+                            rrf_scores[key][1] += 1.0 / (k + rank)
+
+
+                    sorted_candidates = sorted(rrf_scores.values(), key=lambda x: x[1], reverse=True)
+
+                    final_docs = [item[0] for item in sorted_candidates[:5]]
+
+                else:
+
+                    logger.info("⚡ High-probability web query detected. Skipping manual to avoid noise.")
+
+
+                # --- STEP 4: DECISION LOGIC (Web Fallback vs. Refusal) ---
+
+                if not final_docs:
+
+                    # Security Check: Is this a vehicle query that isn't in our manuals?
+
+                    vehicle_anchors = ["car", "bike", "vehicle", "scooter", "motorcycle", "engine", "brake", "transmission", "battery", "tesla"]
+
+                    is_vehicle_related = any(w in clean_prompt for w in vehicle_anchors)
+
+
+                    if is_vehicle_related:
+
+                        logger.info("⚠️ Vehicle query not in manual/Gate triggered. Using Tavily Fallback...")
+
+                        web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
+
+                        if web_results:
+
+                            web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
+
+                            final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
+
+                            is_web_result = True
+
+                    else:
+
+                        # Refusal: No vehicle context found in prompt
+
+                        logger.warning(f"Refusing query (Out of Scope): {original_prompt}")
+
+                        return {**inputs, "context_2": "NO_RELEVANT_TECHNICAL_DATA_FOUND", "retrieved_context": []}
+
+
+                # --- STEP 5: FINAL CONTEXT BUILD ---
+
+                text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_DATA"
+
+                if is_web_result: 
+
+                    text_context = f"*** WEB DATA ***\n{text_context}"
+
+
+                # Metadata for evaluation/logs
+
+                retrieved_context = [
+
+                    {"doc_id": d.metadata.get("source"), "rrf_score": round(score, 4)}
+
+                    for d, score in sorted_candidates[:5]
+
+                ]
+
+
+                return {**inputs, "context_2": text_context, "retrieved_context": retrieved_context}
+
 
             except Exception as e:
+
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
+
                 return {**inputs, "context_2": "Error", "retrieved_context": []}
-
-
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:
@@ -905,11 +970,12 @@ Guidelines:
                 english_response, 
                 target_language=target_lang
             )
-            
-            # 6. Title Generation (using English text for better titles)
-            if len(session.chat_history) <= 2 and not session.chat_title:
-                session.chat_title = await self.generate_chat_title(english_text)
-                
+            session.chat_history.append({"role": "user", "content": english_text})
+            session.chat_history.append({"role": "assistant", "content": english_response})
+
+            # 6. Title Generation
+            if len(session.chat_history) <= 4 and not session.chat_title: # Use <= 4 because we just added 2 messages
+                session.chat_title = await self.generate_chat_title(english_text)    
             return {
                 "response": final_response,        # Localized response (Urdu/Hindi/etc)
                 "english_response": english_response, # English version
