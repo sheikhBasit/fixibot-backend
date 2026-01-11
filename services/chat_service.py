@@ -30,7 +30,10 @@ class ChatService:
         self.image_analyzer = get_image_analyzer(request)
         # self.intent_classifier = get_intent_classifier(request)
         self.chain = self._create_processing_chain()
-        self.tavily_tool = TavilySearch(max_results=3)
+        self.tavily_tool = TavilySearch(
+            tavily_api_key=settings.TAVILY_API_KEY, 
+            max_results=3
+        )
          # Use SandwichProcessor instead of IntentClassifier
         self.sandwich = get_sandwich_processor(request)
     def _contains_non_english_script(self, text: str) -> bool:
@@ -56,7 +59,6 @@ class ChatService:
             
         return False
 
-
     def _determine_processing_path(self, intent: str, user_input: str, has_image: bool = False) -> Literal["simple", "rag", "command", "off_topic"]:
         logger.info(f"Routing logic -> Intent: {intent}, Input: '{user_input}', Has Image: {has_image}")
 
@@ -68,29 +70,52 @@ class ChatService:
         if self._is_off_topic_or_inappropriate(user_input):
             return "off_topic"
 
-        # --- FIX START: Detect Context Modifications (Stop the Restart) ---
-        # If user asks to change the answer style, send it to the BRAIN (RAG), not the Greeter.
+        # --- 3. ENLARGED TECHNICAL INDICATORS ---
+        # Focus on symptoms, specific vehicle parts, and mechanical issues
+        technical_indicators = [
+            # General Subject Matter (The "Vehicle" Keywords)
+            "car", "bike", "vehicle", "scooter", "motorcycle", "bike", "auto", "automobile",
+            # Symptoms
+            "shake", "shaking", "vibrate", "vibration", "noise", "sound", "clicking", 
+            "smoke", "smell", "leak", "leaking", "hot", "overheat", "dim", "heavy",
+            "stuck", "jerking", "hesitating", "pulling", "wobble", "shudder",
+            
+            # Action/State
+            "start", "fire", "crank", "ignition", "broke", "fix", "repair", "issue", 
+            "problem", "error", "check", "light", "warning", "code", "p0", "service",
+            
+            # Components (Specific enough to trigger RAG)
+            "engine", "battery", "tire", "brake", "steering", "gear", "clutch", "fuel",
+            "coolant", "radiator", "plug", "headlight", "suspension", "exhaust"
+        ]
+        
+        # Check for technical content FIRST
+        clean_input = user_input.lower()
+        if any(indicator in clean_input for indicator in technical_indicators):
+            return "rag"
+
+        # --- 4. CONTEXT MODIFICATIONS ---
         modification_keywords = [
             "shorter", "brief", "too long", "summarize", "detail", "explain", 
             "elaborate", "again", "repeat", "what?", "didn't understand", "simplify"
         ]
-        if any(word in user_input.lower() for word in modification_keywords):
-            return "rag" # The Brain handles "Make it shorter", not the Greeter
-        # --- FIX END ---
-        
-        # 3. Handle Conversational Intents
+        if any(word in clean_input for word in modification_keywords):
+            return "rag"
+
+        # --- 5. CONVERSATIONAL INTENTS ---
+        # Now it only goes here if no technical indicators were found
         if intent in ["greeting", "small_talk", "other"]:
             return "simple"
 
-        # 4. Handle Commands (Vehicle Actions vs Conversational Commands)
+        # --- 6. COMMANDS ---
         if intent == "command":
-            # Double check if it's a vehicle command or a chat command
-            if any(word in user_input.lower() for word in ["turn", "switch", "open", "close", "start", "stop"]):
+            command_keywords = ["turn", "switch", "open", "close", "start", "stop", "activate"]
+            if any(word in clean_input for word in command_keywords):
                 return "command"
-            return "rag" # Treat ambiguous commands as technical requests
+            return "rag"
 
-        # 5. Technical Questions
         return "rag"
+    
     
     def _create_simple_response_chain(self) -> RunnableSerializable:
         """Chain for simple responses (greetings, small talk)"""
