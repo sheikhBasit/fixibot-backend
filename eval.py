@@ -1,117 +1,117 @@
-"""
-Test Tavily Connection
-----------------------
-Checks if the API key is valid and can fetch data from the web.
-"""
-import os
-from dotenv import load_dotenv
-from langchain_community.tools.tavily_search import TavilySearchResults
+# """
+# Test Tavily Connection
+# ----------------------
+# Checks if the API key is valid and can fetch data from the web.
+# """
+# import os
+# from dotenv import load_dotenv
+# from langchain_community.tools.tavily_search import TavilySearchResults
 
-# Load environment variables
-load_dotenv()
+# # Load environment variables
+# load_dotenv()
 
-def test_connection():
-    print("🌍 Testing Tavily API Connection...")
+# def test_connection():
+#     print("🌍 Testing Tavily API Connection...")
     
-    api_key = os.getenv("TAVILY_API_KEY")
-    if not api_key:
-        print("❌ CRITICAL: TAVILY_API_KEY is missing from .env file!")
-        return
+#     api_key = os.getenv("TAVILY_API_KEY")
+#     if not api_key:
+#         print("❌ CRITICAL: TAVILY_API_KEY is missing from .env file!")
+#         return
 
-    try:
-        # Initialize Tool
-        tool = TavilySearchResults(max_results=1)
+#     try:
+#         # Initialize Tool
+#         tool = TavilySearchResults(max_results=1)
         
-        # Run a query that definitely requires the internet
-        query = "Who won the 2024 Formula 1 Championship?"
-        print(f"🔎 Searching for: '{query}'...")
+#         # Run a query that definitely requires the internet
+#         query = "Who won the 2024 Formula 1 Championship?"
+#         print(f"🔎 Searching for: '{query}'...")
         
-        results = tool.invoke({"query": query})
+#         results = tool.invoke({"query": query})
         
-        if results and isinstance(results, list):
-            print("\n✅ SUCCESS: Web Search Works!")
-            print("-" * 50)
-            content = results[0].get('content', 'No content')
-            url = results[0].get('url', 'No URL')
-            print(f"Source: {url}")
-            print(f"Snippet: {content[:150]}...")
-            print("-" * 50)
-        else:
-            print("⚠️ WARNING: Search returned no results (Check your API quota).")
+#         if results and isinstance(results, list):
+#             print("\n✅ SUCCESS: Web Search Works!")
+#             print("-" * 50)
+#             content = results[0].get('content', 'No content')
+#             url = results[0].get('url', 'No URL')
+#             print(f"Source: {url}")
+#             print(f"Snippet: {content[:150]}...")
+#             print("-" * 50)
+#         else:
+#             print("⚠️ WARNING: Search returned no results (Check your API quota).")
 
-    except Exception as e:
-        print(f"\n❌ FAILURE: Could not connect to Tavily.\nError: {e}")
+#     except Exception as e:
+#         print(f"\n❌ FAILURE: Could not connect to Tavily.\nError: {e}")
 
-if __name__ == "__main__":
-    test_connection()
+# if __name__ == "__main__":
+#     test_connection()
 
-"""
-Test RAG Fallback Logic
------------------------
-Simulates a ChatService with an EMPTY Vector Store.
-Verifies that the system correctly falls back to Tavily.
-"""
-import asyncio
-import os
-from dotenv import load_dotenv
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.documents import Document
+# """
+# Test RAG Fallback Logic
+# -----------------------
+# Simulates a ChatService with an EMPTY Vector Store.
+# Verifies that the system correctly falls back to Tavily.
+# """
+# import asyncio
+# import os
+# from dotenv import load_dotenv
+# from langchain_community.tools.tavily_search import TavilySearchResults
+# from langchain_core.documents import Document
 
-load_dotenv()
+# load_dotenv()
 
-async def simulate_retrieval_chain():
-    print("🔧 Initializing Logic Test...")
+# async def simulate_retrieval_chain():
+#     print("🔧 Initializing Logic Test...")
     
-    # 1. MOCK: Setup a Tavily Tool (Real)
-    tavily_tool = TavilySearchResults(max_results=3)
+#     # 1. MOCK: Setup a Tavily Tool (Real)
+#     tavily_tool = TavilySearchResults(max_results=3)
     
-    # 2. MOCK: Setup a "Vector Store" that returns NOTHING (Simulating failure)
-    print("📉 Simulating Empty Vector Store...")
-    vector_results = [] # <--- This is empty!
+#     # 2. MOCK: Setup a "Vector Store" that returns NOTHING (Simulating failure)
+#     print("📉 Simulating Empty Vector Store...")
+#     vector_results = [] # <--- This is empty!
     
-    # 3. RUN THE LOGIC (Copied from your ChatService)
-    query = "latest recalls for 2024 Honda Civic"
-    final_docs = []
-    is_web_result = False
+#     # 3. RUN THE LOGIC (Copied from your ChatService)
+#     query = "latest recalls for 2024 Honda Civic"
+#     final_docs = []
+#     is_web_result = False
     
-    # Logic Step: If vector results are empty, try Tavily
-    if not vector_results:
-        print(f"⚠️ Vector search empty for '{query}'. Triggering Tavily...")
-        try:
-            # Run Web Search
-            web_results = await tavily_tool.ainvoke({"query": query})
+#     # Logic Step: If vector results are empty, try Tavily
+#     if not vector_results:
+#         print(f"⚠️ Vector search empty for '{query}'. Triggering Tavily...")
+#         try:
+#             # Run Web Search
+#             web_results = await tavily_tool.ainvoke({"query": query})
             
-            if isinstance(web_results, list) and len(web_results) > 0:
-                web_content = ""
-                for res in web_results:
-                    web_content += f"Source: {res.get('url', 'Web')}\nContent: {res.get('content', '')}\n\n"
+#             if isinstance(web_results, list) and len(web_results) > 0:
+#                 web_content = ""
+#                 for res in web_results:
+#                     web_content += f"Source: {res.get('url', 'Web')}\nContent: {res.get('content', '')}\n\n"
                 
-                # Create Fake Document
-                final_docs = [Document(page_content=web_content, metadata={"source": "Google/Tavily"})]
-                is_web_result = True
-                print("✅ Tavily found results.")
-            else:
-                print("❌ Tavily returned no results.")
+#                 # Create Fake Document
+#                 final_docs = [Document(page_content=web_content, metadata={"source": "Google/Tavily"})]
+#                 is_web_result = True
+#                 print("✅ Tavily found results.")
+#             else:
+#                 print("❌ Tavily returned no results.")
                 
-        except Exception as e:
-            print(f"❌ Tavily search failed: {e}")
+#         except Exception as e:
+#             print(f"❌ Tavily search failed: {e}")
 
-    # 4. REPORT RESULTS
-    print("\n" + "="*40)
-    print("📊 FINAL OUTCOME")
-    print("="*40)
+#     # 4. REPORT RESULTS
+#     print("\n" + "="*40)
+#     print("📊 FINAL OUTCOME")
+#     print("="*40)
     
-    if is_web_result:
-        print("✅ SYSTEM WORKED: It switched to Web Search.")
-        print(f"📄 Retrieved Content Length: {len(final_docs[0].page_content)} chars")
-        print(f"🔗 Source Metadata: {final_docs[0]}")
-    else:
-        print("❌ SYSTEM FAILED: It did not switch to Web Search.")
+#     if is_web_result:
+#         print("✅ SYSTEM WORKED: It switched to Web Search.")
+#         print(f"📄 Retrieved Content Length: {len(final_docs[0].page_content)} chars")
+#         print(f"🔗 Source Metadata: {final_docs[0]}")
+#     else:
+#         print("❌ SYSTEM FAILED: It did not switch to Web Search.")
 
-if __name__ == "__main__":
-    asyncio.run(simulate_retrieval_chain())
+# if __name__ == "__main__":
+#     asyncio.run(simulate_retrieval_chain())
     
-# # with groq
+# with groq
 # """
 # Advanced RAG Evaluation with Rate Limit Handling
 # """
@@ -478,3 +478,126 @@ if __name__ == "__main__":
 
 # if __name__ == "__main__":
 #     asyncio.run(verify_vector_only())
+
+
+
+
+# Advanced RAG Evaluation with Rate Limit Handling
+import sys
+import os
+import asyncio
+import json
+import re
+import pandas as pd
+from pathlib import Path
+from dotenv import load_dotenv
+
+# --- SETUP ---
+load_dotenv()
+current_dir = Path(__file__).resolve().parent
+sys.path.append(str(current_dir))
+
+try:
+    from langchain_community.vectorstores import FAISS
+    from services.multimodal_embeddings import embed_text
+    from langchain_core.embeddings import Embeddings
+except ImportError as e:
+    print(f"❌ Import Error: {e}")
+    sys.exit(1)
+
+class FunctionalEmbeddings(Embeddings):
+    def __init__(self, f): self.f = f
+    def embed_documents(self, t): return [self.f(x).tolist() for x in t]
+    def embed_query(self, t): return self.f(t).tolist()
+
+def rrf_score(results_list, k=60):
+    rrf_map = {} 
+    for result_set in results_list:
+        for rank, (doc, l2_score) in enumerate(result_set, 1):
+            if l2_score > 1.5: continue 
+            
+            src = doc.metadata.get("source", "unk")
+            pg = doc.metadata.get("page", -1)
+            key = f"{src}_{pg}"
+            
+            if key not in rrf_map:
+                rrf_map[key] = [doc, 0.0]
+            rrf_map[key][1] += 1.0 / (k + rank)
+    
+    return sorted(rrf_map.values(), key=lambda x: x[1], reverse=True)
+
+async def verify_sorting_performance():
+    print("🔧 Initializing Sorting Comparison Verification...")
+    
+    json_path = current_dir / "test_ground_truth.json"
+    with open(json_path, "r") as f:
+        test_cases = json.load(f)
+
+    cache_dir = current_dir / ".vector_cache"
+    faiss_files = list(cache_dir.glob("*.faiss"))
+    index_name = faiss_files[0].stem
+    print(f"📂 Loading index: {index_name}")
+
+    vectorstore = FAISS.load_local(
+        str(cache_dir), 
+        embeddings=FunctionalEmbeddings(embed_text),
+        allow_dangerous_deserialization=True,
+        index_name=index_name
+    )
+
+    comparison_results = []
+    print(f"🚀 Benchmarking {len(test_cases)} queries...")
+
+    for i, case in enumerate(test_cases):
+        query = case["question"]
+        
+        # --- FIX: Target the "Page: X" string specifically ---
+        # We look for the item in the list that contains the word 'Page'
+        gt_page = -1
+        for identifier in case["relevant_doc_ids"]:
+            if "Page" in identifier:
+                numbers = re.findall(r'\d+', identifier)
+                if numbers:
+                    gt_page = int(numbers[0])
+                    break
+        
+        if gt_page == -1:
+            print(f"⚠️ Warning: Could not find page for Query {i+1}. Skipping...")
+            continue
+        
+        # Simulate Multi-Query
+        queries = [query, f"technical repair for {query}"] 
+        
+        raw_results_list = []
+        for q in queries:
+            emb = await embed_text(q) if asyncio.iscoroutinefunction(embed_text) else await asyncio.to_thread(embed_text, q)
+            res = await vectorstore.asimilarity_search_with_score_by_vector(emb, k=10)
+            raw_results_list.append(res)
+
+        # Strategy 1: Old L2 Sorting
+        flat_l2 = [item for sublist in raw_results_list for item in sublist]
+        l2_sorted = sorted(flat_l2, key=lambda x: x[1])[:5]
+        
+        # Strategy 2: New RRF Sorting
+        rrf_results = rrf_score(raw_results_list)[:5]
+
+        l2_rank = next((r for r, (d, s) in enumerate(l2_sorted, 1) if int(d.metadata.get("page", -1)) == gt_page), 0)
+        rrf_rank = next((r for r, val in enumerate(rrf_results, 1) if int(val[0].metadata.get("page", -1)) == gt_page), 0)
+
+        comparison_results.append({
+            "l2_hit": 1 if l2_rank > 0 else 0,
+            "l2_mrr": 1/l2_rank if l2_rank > 0 else 0,
+            "rrf_hit": 1 if rrf_rank > 0 else 0,
+            "rrf_mrr": 1/rrf_rank if rrf_rank > 0 else 0
+        })
+
+    df = pd.DataFrame(comparison_results)
+    print("\n" + "="*55)
+    print(f"{'METRIC':<20} | {'OLD (L2)':<12} | {'NEW (RRF)':<12}")
+    print("-" * 55)
+    print(f"{'Recall @ 5':<20} | {df['l2_hit'].mean():.3f}       | {df['rrf_hit'].mean():.3f}")
+    print(f"{'Mean Reciprocal Rank':<20} | {df['l2_mrr'].mean():.3f}       | {df['rrf_mrr'].mean():.3f}")
+    print("="*55)
+
+if __name__ == "__main__":
+    asyncio.run(verify_hybrid_metrics() if 'verify_hybrid_metrics' in globals() else verify_sorting_performance())

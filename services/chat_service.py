@@ -452,28 +452,25 @@ class ChatService:
         #         logger.error(f"Retrieval failed: {e}", exc_info=True)
         #         return {**inputs, "context_2": "Error", "retrieved_context": []}
 
-    
         async def retrieval_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """
-            FINAL OPTIMIZED SEARCH (No Reranker).
-            Uses Parallel Vector Search to achieve 100% Recall.
-            """
             try:
                 # 1. Setup
-                base_query = inputs.get("search_query", inputs["prompt"])
-                queries = inputs.get("search_queries", [base_query])
-                if isinstance(queries, str): queries = [queries]
+                original_prompt = inputs.get("prompt", "")
+                # Get expansion queries from Step 1
+                expansion_results = inputs.get("search_queries", [])
+                
+                # Combined list: [Original, Q1, Q2, Q3]
+                search_list = [original_prompt] + expansion_results
 
                 # 2. Async Parallel Search
                 async def process_single_query(query_text):
                     try:
-                        # ✅ FIX: Handle Async/Sync Embedding correctly
                         if asyncio.iscoroutinefunction(embed_text):
                             query_embedding = await embed_text(query_text)
                         else:
                             query_embedding = await asyncio.to_thread(embed_text, query_text)
                         
-                        # Fetch Top 5 for THIS variation
+                        # Fetch Top 5 for each query variation
                         return await self.vectorstore.asimilarity_search_with_score_by_vector(
                             query_embedding, k=5
                         )
@@ -481,112 +478,65 @@ class ChatService:
                         logger.error(f"Search failed: {e}")
                         return []
 
-                # Run searches
-                results_list = await asyncio.gather(*[process_single_query(q) for q in queries])
-                raw_docs = [item for sublist in results_list for item in sublist]
+                # Run all searches in parallel
+                # results_list will be a list of lists: [[(doc, score), ...], [(doc, score), ...]]
+                results_list = await asyncio.gather(*[process_single_query(q) for q in search_list])
 
-                # 3. Deduplicate (Keep Best Score)
-                unique_docs = {}
-                for item in raw_docs:
-                    if isinstance(item, tuple): doc, score = item
-                    else: doc, score = item, 100.0
-                    
-                    # Create unique key based on source/page
-                    src = doc.metadata.get('source', 'unk')
-                    pg = doc.metadata.get('page', 'unk')
-                    img = doc.metadata.get('image_id', '')
-                    key = f"img_{img}" if img else f"{src}_{pg}"
+                # 3. Reciprocal Rank Fusion (RRF) for High Precision
+                # Formula: score = sum( 1 / (k + rank) )
+                rrf_scores = {} # Key: (source, page) -> Value: [doc_object, rrf_score]
+                k = 60 # Constant for RRF stability
 
-                    # Keep the instance with the lowest (best) L2 score
-                    if key not in unique_docs or score < unique_docs[key][1]:
-                        unique_docs[key] = (doc, score)
-
-                # 4. Sort & Select Top Candidates
-                candidates = list(unique_docs.values())
-                # Sort by Vector Score (Ascending = Best)
-                candidates.sort(key=lambda x: x[1])
-
-                # 5. Final Filtering (Top 7)
-                final_docs = []
-                for doc, score in candidates[:7]:
-                    # Loose filter: L2 distance > 1.4 is usually irrelevant
-                    if score < 1.4:
-                        final_docs.append(doc)
-
-                # Fallback: Always return Top 1 if nothing passed filter
-                if not final_docs and candidates:
-                    final_docs.append(candidates[0][0])
-
-                # =========================================================
-                # 🌍 TAVILY WEB SEARCH FALLBACK (The New Part)
-                # =========================================================
-                is_web_result = False
-                
-                # If Vector Search found NOTHING valid
-                if not final_docs:
-                    logger.info(f"⚠️ Vector search empty for '{base_query}'. Triggering Tavily...")
-                    try:
-                        # Use base_query for web search (it's usually cleaner)
-                        # Tavily is sync by default, but LangChain tools have .ainvoke
-                        web_results = await self.tavily_tool.ainvoke({"query": base_query})
+                for search_results in results_list:
+                    for rank, (doc, l2_score) in enumerate(search_results, 1):
+                        # Filter out garbage immediately (Precision Guardrail)
+                        if l2_score > 1.3: continue 
                         
-                        # Process Tavily Results
-                        # Tavily returns list of dicts: [{'url':..., 'content':...}]
-                        if isinstance(web_results, list) and len(web_results) > 0:
-                            web_content = ""
-                            for res in web_results:
-                                web_content += f"Source: {res.get('url', 'Web')}\nContent: {res.get('content', '')}\n\n"
-                            
-                            # Create a "Fake" Document so the rest of the pipeline works
-                            final_docs = [Document(page_content=web_content, metadata={"source": "Google/Tavily"})]
-                            is_web_result = True
-                            logger.info("✅ Tavily found results.")
-                        else:
-                            logger.warning("❌ Tavily returned no results.")
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Tavily search failed: {e}")
-                        # Do nothing, final_docs remains empty -> Triggers Apology
+                        src = doc.metadata.get('source', 'unk')
+                        pg = doc.metadata.get('page', 'unk')
+                        key = f"{src}_{pg}"
+                        
+                        if key not in rrf_scores:
+                            rrf_scores[key] = [doc, 0.0]
+                        
+                        # Add RRF boost based on rank in this specific search result
+                        rrf_scores[key][1] += 1.0 / (k + rank)
 
-                # 4. Build Context Output
-                if final_docs:
-                    text_context = "\n---\n".join([d.page_content for d in final_docs])
-                    # Add a header so the LLM knows if it's manual vs web data
-                    if is_web_result:
-                        text_context = f"*** NOTE: DATA FROM WEB SEARCH ***\n{text_context}"
-                else:
-                    text_context = "NO_RELEVANT_TECHNICAL_DATA_FOUND"
+                # 4. Sort by RRF Score (Descending - Higher is better)
+                sorted_candidates = sorted(rrf_scores.values(), key=lambda x: x[1], reverse=True)
+                final_docs = [item[0] for item in sorted_candidates[:5]] # Keep Top 5 most precise
+
+                # 5. Tavily Fallback (Only if RRF found nothing)
+                is_web_result = False
+                if not final_docs:
+                    logger.info("⚠️ No local precision match. Triggering Tavily...")
+                    web_results = await self.tavily_tool.ainvoke({"query": original_prompt})
+                    if web_results:
+                        web_content = "\n---\n".join([f"Source: {res.get('url')}\n{res.get('content')}" for res in web_results])
+                        final_docs = [Document(page_content=web_content, metadata={"source": "Tavily/Web"})]
+                        is_web_result = True
+
                 # 6. Build Context
-                # text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_RELEVANT_TECHNICAL_DATA_FOUND"
-                
-                # Multimodal context
-                multimodal_context = []
-                for doc in final_docs:
-                    if doc.metadata.get("type") == "image":
-                        img_id = doc.metadata.get("image_id")
-                        if img_id in self.image_data_store:
-                            multimodal_context.append({
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{self.image_data_store[img_id]}"}
-                            })
+                text_context = "\n---\n".join([d.page_content for d in final_docs]) if final_docs else "NO_DATA"
+                if is_web_result: text_context = f"*** WEB DATA ***\n{text_context}"
 
-                # Evaluation Meta
+                # Evaluation Metadata
                 retrieved_context = [
-                    {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "score": round(score, 3)}
-                    for d, score in candidates[:7] if hasattr(d, "metadata")
+                    {"doc_id": d.metadata.get("source"), "page": d.metadata.get("page"), "rrf_score": round(score, 4)}
+                    for d, score in sorted_candidates[:5]
                 ]
 
                 return {
                     **inputs,
                     "context_2": text_context,
-                    "multimodal_context": multimodal_context,
                     "retrieved_context": retrieved_context
                 }
 
             except Exception as e:
                 logger.error(f"Retrieval failed: {e}", exc_info=True)
                 return {**inputs, "context_2": "Error", "retrieved_context": []}
-                
+
+
         async def diagnostic_chain(inputs: Dict[str, Any]) -> Dict[str, Any]:
             """Generate diagnostic response using the LLM"""
             try:

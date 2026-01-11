@@ -55,11 +55,11 @@ def create_diagnostic_agent(api_key: str):
             # Model selection based on response type
             if is_simple_response:
                 model = "llama-3.1-8b-instant"
-                temperature = 0.7
+                temperature = 0.0
                 max_tokens = 256
             else:
                 model = "llama-3.3-70b-versatile"
-                temperature = 0.3
+                temperature = 0.2
                 max_tokens = 800
 
             messages = [{"role": "system", "content": system_prompt}]
